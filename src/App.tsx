@@ -1,0 +1,105 @@
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import {
+  BarChart3, Bolt, ClipboardList, Contact, LayoutDashboard, ListOrdered,
+  Moon, Package, Settings, Sun, Truck,
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import Panel from './pages/Panel'
+import Talepler from './pages/Talepler'
+import Katalog from './pages/Katalog'
+import DinListesi from './pages/DinListesi'
+import Raporlar from './pages/Raporlar'
+import SiparisListeleri from './pages/SiparisListeleri'
+import Musteriler from './pages/Musteriler'
+import Tedarikciler from './pages/Tedarikciler'
+import Ayarlar from './pages/Ayarlar'
+import { ToastAlani } from './components/Toast'
+
+const MENU = [
+  { yol: '/panel', ad: 'Panel', Ikon: LayoutDashboard },
+  { yol: '/talepler', ad: 'Talepler', Ikon: ClipboardList },
+  { yol: '/katalog', ad: 'Katalog', Ikon: Package },
+  { yol: '/din', ad: 'DIN Listesi', Ikon: ListOrdered },
+  { yol: '/raporlar', ad: 'Raporlar', Ikon: BarChart3 },
+  { yol: '/siparisler', ad: 'Sipariş Listeleri', Ikon: Truck },
+  { yol: '/musteriler', ad: 'Müşteriler', Ikon: Contact },
+  { yol: '/tedarikciler', ad: 'Tedarikçiler', Ikon: Contact },
+  { yol: '/ayarlar', ad: 'Ayarlar', Ikon: Settings },
+]
+
+function temaTercihi(): 'light' | 'dark' {
+  const kayit = document.documentElement.dataset.theme
+  if (kayit === 'dark' || kayit === 'light') return kayit
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+export default function App() {
+  const [tema, setTema] = useState<'light' | 'dark'>(temaTercihi)
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = tema
+    localStorage.setItem('tema', tema)
+  }, [tema])
+
+  return (
+    <div className="min-h-screen md:flex">
+      {/* Sol menü */}
+      <aside className="md:w-60 md:min-h-screen shrink-0 bg-surface border-b md:border-b-0 md:border-r border-line">
+        <div className="flex items-center gap-2.5 px-5 py-4">
+          <span className="grid place-items-center w-9 h-9 rounded-lg bg-accent text-accent-ink">
+            <Bolt size={20} aria-hidden />
+          </span>
+          <div className="leading-tight">
+            <div className="font-bold tracking-tight">Paslanmaz Takip</div>
+            <div className="text-xs text-ink-3">Talep &amp; Satınalma</div>
+          </div>
+        </div>
+        <nav className="flex md:block overflow-x-auto px-3 pb-3 md:pb-4 gap-1">
+          {MENU.map(({ yol, ad, Ikon }) => (
+            <NavLink
+              key={yol}
+              to={yol}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap md:mb-0.5 ${
+                  isActive
+                    ? 'bg-accent-soft text-accent'
+                    : 'text-ink-2 hover:bg-surface-2 hover:text-ink'
+                }`
+              }
+            >
+              <Ikon size={17} aria-hidden />
+              {ad}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="hidden md:block px-5 py-4 mt-auto">
+          <button
+            className="btn btn-ikincil btn-kucuk"
+            onClick={() => setTema(tema === 'dark' ? 'light' : 'dark')}
+          >
+            {tema === 'dark' ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
+            {tema === 'dark' ? 'Açık tema' : 'Koyu tema'}
+          </button>
+        </div>
+      </aside>
+
+      {/* İçerik */}
+      <main className="flex-1 min-w-0 px-4 md:px-8 py-6 max-w-[1200px]">
+        <Routes>
+          <Route path="/" element={<Navigate to="/panel" replace />} />
+          <Route path="/panel" element={<Panel />} />
+          <Route path="/talepler" element={<Talepler />} />
+          <Route path="/katalog" element={<Katalog />} />
+          <Route path="/din" element={<DinListesi />} />
+          <Route path="/raporlar" element={<Raporlar />} />
+          <Route path="/siparisler" element={<SiparisListeleri />} />
+          <Route path="/musteriler" element={<Musteriler />} />
+          <Route path="/tedarikciler" element={<Tedarikciler />} />
+          <Route path="/ayarlar" element={<Ayarlar tema={tema} setTema={setTema} />} />
+          <Route path="*" element={<Navigate to="/panel" replace />} />
+        </Routes>
+      </main>
+      <ToastAlani />
+    </div>
+  )
+}

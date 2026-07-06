@@ -1,0 +1,146 @@
+// Müşteriler ve Tedarikçiler için ortak basit rehber bileşeni.
+import { useState } from 'react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
+import type { EntityTable } from 'dexie'
+import { useLiveQuery } from 'dexie-react-hooks'
+import Modal from './Modal'
+import { BosDurum, SayfaBaslik } from './Parcalar'
+import { toast } from './Toast'
+import { trLower } from '../lib/searchWords'
+
+export interface RehberKaydi {
+  id?: number
+  ad: string
+  telefon: string
+  email: string
+}
+
+interface Props {
+  baslik: string
+  aciklama: string
+  tekil: string // "müşteri" | "tedarikçi"
+  tablo: EntityTable<RehberKaydi, 'id'>
+  ekSutun?: { baslik: string; deger: (id: number) => number } // talep sayısı vb.
+}
+
+export default function Rehber({ baslik, aciklama, tekil, tablo, ekSutun }: Props) {
+  const [arama, setArama] = useState('')
+  const [duzenlenen, setDuzenlenen] = useState<RehberKaydi | null>(null)
+  const [modalAcik, setModalAcik] = useState(false)
+  const [form, setForm] = useState<RehberKaydi>({ ad: '', telefon: '', email: '' })
+
+  const kayitlar = useLiveQuery(() => tablo.orderBy('ad').toArray(), []) ?? []
+  const filtreli = kayitlar.filter((k) => !arama.trim() || trLower(k.ad).includes(trLower(arama.trim())))
+
+  function ac(kayit?: RehberKaydi) {
+    setDuzenlenen(kayit ?? null)
+    setForm(kayit ? { ...kayit } : { ad: '', telefon: '', email: '' })
+    setModalAcik(true)
+  }
+
+  async function kaydet() {
+    if (!form.ad.trim()) {
+      toast('Ad zorunludur.', 'hata')
+      return
+    }
+    if (duzenlenen?.id) {
+      await tablo.update(duzenlenen.id, { ad: form.ad.trim(), telefon: form.telefon, email: form.email })
+      toast('Güncellendi.')
+    } else {
+      await tablo.add({ ad: form.ad.trim(), telefon: form.telefon, email: form.email })
+      toast('Eklendi.')
+    }
+    setModalAcik(false)
+  }
+
+  return (
+    <div>
+      <SayfaBaslik
+        baslik={baslik}
+        aciklama={aciklama}
+        sag={
+          <button className="btn btn-birincil" onClick={() => ac()}>
+            <Plus size={16} aria-hidden /> Yeni {tekil}
+          </button>
+        }
+      />
+
+      <input
+        className="girdi max-w-md mb-3"
+        placeholder={`${baslik} içinde ara…`}
+        value={arama}
+        onChange={(e) => setArama(e.target.value)}
+      />
+
+      {filtreli.length === 0 ? (
+        <BosDurum mesaj={`Kayıtlı ${tekil} yok`} />
+      ) : (
+        <div className="kart overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-line bg-surface-2">
+                <th className="px-4 py-2.5 font-semibold">Ad</th>
+                <th className="px-4 py-2.5 font-semibold">Telefon</th>
+                <th className="px-4 py-2.5 font-semibold">E-posta</th>
+                {ekSutun && <th className="px-4 py-2.5 font-semibold">{ekSutun.baslik}</th>}
+                <th className="px-2 py-2.5" aria-label="İşlemler"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtreli.map((k) => (
+                <tr key={k.id} className="border-b border-line last:border-b-0 hover:bg-surface-2">
+                  <td className="px-4 py-2.5 font-medium">{k.ad}</td>
+                  <td className="px-4 py-2.5 whitespace-nowrap">{k.telefon || '—'}</td>
+                  <td className="px-4 py-2.5">{k.email || '—'}</td>
+                  {ekSutun && (
+                    <td className="px-4 py-2.5">
+                      <span className="bg-accent-soft text-accent rounded-full px-2.5 py-0.5 text-xs font-semibold tnum">
+                        {ekSutun.deger(k.id!)}
+                      </span>
+                    </td>
+                  )}
+                  <td className="px-2 py-2.5 whitespace-nowrap">
+                    <button className="text-ink-3 hover:text-accent p-1" onClick={() => ac(k)} aria-label="Düzenle">
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      className="text-ink-3 hover:text-bad p-1"
+                      onClick={async () => {
+                        await tablo.delete(k.id!)
+                        toast('Silindi.')
+                      }}
+                      aria-label="Sil"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal baslik={duzenlenen ? `${tekil} düzenle` : `Yeni ${tekil}`} acik={modalAcik} kapat={() => setModalAcik(false)}>
+        <div className="grid gap-3">
+          <div>
+            <label className="text-xs font-medium text-ink-2 block mb-1">Ad *</label>
+            <input className="girdi" value={form.ad} onChange={(e) => setForm({ ...form, ad: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-2 block mb-1">Telefon</label>
+            <input className="girdi" value={form.telefon} onChange={(e) => setForm({ ...form, telefon: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-2 block mb-1">E-posta</label>
+            <input className="girdi" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </div>
+          <div className="flex justify-end gap-2 mt-1">
+            <button className="btn btn-ikincil" onClick={() => setModalAcik(false)}>Vazgeç</button>
+            <button className="btn btn-birincil" onClick={kaydet}>Kaydet</button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
