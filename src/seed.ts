@@ -141,9 +141,15 @@ export async function ornekVeriYukle(): Promise<void> {
 }
 
 /** İlk açılış kontrolü: katalog boşsa örnek veri yükler. */
+/** YALNIZ gerçek ilk açılışta örnek veri yükler; sonrasında kullanıcı
+ *  verisine asla dokunmaz (katalog bilerek boşaltılmış olsa bile). */
 export async function ilkKurulum(): Promise<void> {
-  const say = await db.products.count()
-  if (say === 0) await ornekVeriYukle()
+  const yapildi = await db.settings.get('ilkKurulumTamam')
+  if (yapildi) return
+  if ((await db.products.count()) === 0 && (await db.demands.count()) === 0) {
+    await ornekVeriYukle()
+  }
+  await db.settings.put({ key: 'ilkKurulumTamam', value: '1' })
 }
 
 // Excel importundan da kullanılan yardımcı: açıklamadan kalite yakala.

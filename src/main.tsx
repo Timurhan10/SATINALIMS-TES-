@@ -11,6 +11,9 @@ if (tema === 'dark' || tema === 'light') {
   document.documentElement.dataset.theme = tema
 }
 
+// Tarayıcıdan kalıcı depolama iste: disk dolduğunda bile veriler silinmez.
+navigator.storage?.persist?.().catch(() => {})
+
 ilkKurulum().finally(() => {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

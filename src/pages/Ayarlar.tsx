@@ -9,12 +9,18 @@ import { toast } from '../components/Toast'
 export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; setTema: (t: 'light' | 'dark') => void }) {
   const [anahtar, setAnahtar] = useState('')
   const [yuklendi, setYuklendi] = useState(false)
+  const [kalici, setKalici] = useState<boolean | null>(null)
 
   useEffect(() => {
     ayarOku(AI_ANAHTAR_KEY).then((v) => {
       setAnahtar(v)
       setYuklendi(true)
     })
+    // Kalıcı depolama iste ve durumu göster
+    navigator.storage
+      ?.persist?.()
+      .then(setKalici)
+      .catch(() => setKalici(null))
   }, [])
 
   async function yedekIndir() {
@@ -80,10 +86,18 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
       {/* Veri */}
       <div className="kart p-4 md:p-5">
         <div className="mikro mb-2">Veri Yönetimi</div>
-        <p className="text-sm text-ink-2 mb-3">
-          Tüm veriler bu tarayıcının içinde (IndexedDB) saklanır — internete gönderilmez. Düzenli olarak JSON
-          yedek almanızı öneririz; yedek başka bir bilgisayara taşınabilir.
+        <p className="text-sm text-ink-2 mb-2">
+          Tüm veriler <strong>anında ve otomatik</strong> olarak bu tarayıcının içine (IndexedDB) kaydedilir —
+          kaydet düğmesine gerek yoktur ve internete gönderilmez. Veriler siteye ve tarayıcıya özeldir:
+          her zaman aynı adresi ve aynı tarayıcıyı kullanın.
         </p>
+        {kalici !== null && (
+          <p className={`text-sm font-medium mb-3 ${kalici ? 'text-ok' : 'text-warn'}`}>
+            {kalici
+              ? '✓ Kalıcı depolama aktif — tarayıcı verilerinizi otomatik silmez.'
+              : '⚠ Kalıcı depolama izni verilmedi — güvence için düzenli JSON yedek alın.'}
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           <button className="btn btn-birincil" onClick={yedekIndir}>
             <Download size={16} aria-hidden /> Yedek indir (JSON)
