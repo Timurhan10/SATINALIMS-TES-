@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileSpreadsheet, Pencil, Plus, Search, Trash2 } from 'lucide-react'
-import { urunGuncelle, urunIdleriyleSil, urunListele, urunSil, urunToptanEkle } from '../data/api'
+import { tumUrunleriSil, urunGuncelle, urunIdleriyleSil, urunListele, urunSil, urunToptanEkle } from '../data/api'
 import { useVeri } from '../data/hooks'
 import { hataMesaji } from '../data/client'
 import type { Kalite, Product } from '../types'
@@ -25,6 +25,8 @@ export default function Katalog() {
   const [importDosya, setImportDosya] = useState<File | null>(null)
   const [importCalisiyor, setImportCalisiyor] = useState(false)
   const [surukleniyor, setSurukleniyor] = useState(false)
+  const [secim, setSecim] = useState<Set<number>>(new Set())
+  const [siliniyor, setSiliniyor] = useState(false)
   const dosyaInput = useRef<HTMLInputElement>(null)
 
   const urunlerHam = useVeri(urunListele)
@@ -50,6 +52,58 @@ export default function Katalog() {
     return urunEslestir(urunler, imza, aramaGecikmeli, grup, kalite, 100000).urunler
   }, [urunler, aramaGecikmeli, grup, kalite])
 
+  // ---- toplu silme ----
+  const tumuSecili = sonuclar.length > 0 && sonuclar.every((u) => secim.has(u.id!))
+
+  function tumunuSecToggle() {
+    setSecim(tumuSecili ? new Set() : new Set(sonuclar.map((u) => u.id!)))
+  }
+
+  function satirSecToggle(id: number) {
+    setSecim((eski) => {
+      const yeni = new Set(eski)
+      if (yeni.has(id)) yeni.delete(id)
+      else yeni.add(id)
+      return yeni
+    })
+  }
+
+  async function secilenleriSil() {
+    if (secim.size === 0 || siliniyor) return
+    if (!window.confirm(`Seçilen ${secim.size.toLocaleString('tr-TR')} ürün silinsin mi?`)) return
+    setSiliniyor(true)
+    try {
+      await urunIdleriyleSil([...secim])
+      toast(`${secim.size.toLocaleString('tr-TR')} ürün silindi.`)
+      setSecim(new Set())
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    } finally {
+      setSiliniyor(false)
+    }
+  }
+
+  async function hepsiniSil() {
+    if (siliniyor || urunler.length === 0) return
+    if (
+      !window.confirm(
+        `DİKKAT: Katalogdaki ${urunler.length.toLocaleString('tr-TR')} ürünün TAMAMI silinecek ` +
+          '(elle ve AI ile eklenenler dahil). Bu işlem geri alınamaz. Emin misiniz?',
+      )
+    )
+      return
+    setSiliniyor(true)
+    try {
+      await tumUrunleriSil()
+      toast('Tüm ürünler silindi.')
+      setSecim(new Set())
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    } finally {
+      setSiliniyor(false)
+    }
+  }
+
   async function excelYukle(dosya: File, mod: 'degistir' | 'birlestir') {
     setImportCalisiyor(true)
     try {
@@ -61,9 +115,12 @@ export default function Katalog() {
       if (mod === 'degistir') {
         // Önce yükle/güncelle, başarılıysa yeni dosyada olmayan eski Excel ürünlerini sil:
         // işlem ortada kesilirse katalog kaybolmaz. Elle/AI eklenen ürünler korunur.
+        // Artıklar ekrandaki (eski olabilecek) listeden değil, sunucudan çekilen
+        // TAM listeden hesaplanır.
         await urunToptanEkle(yeni, true)
         const yeniKodlar = new Set(yeni.map((u) => u.kartKodu))
-        const artiklar = urunler
+        const guncel = await urunListele()
+        const artiklar = guncel
           .filter((u) => u.kaynak === 'katalog' && !yeniKodlar.has(u.kartKodu))
           .map((u) => u.id!)
         await urunIdleriyleSil(artiklar)
@@ -105,6 +162,11 @@ export default function Katalog() {
             <button className="btn btn-birincil" onClick={() => setEkleAcik(true)}>
               <Plus size={16} aria-hidden /> Ürün ekle
             </button>
+            {urunler.length > 0 && (
+              <button className="btn btn-tehlike" onClick={hepsiniSil} disabled={siliniyor}>
+                <Trash2 size={16} aria-hidden /> Tümünü sil
+              </button>
+            )}
           </>
         }
       />
@@ -151,6 +213,20 @@ export default function Katalog() {
         </select>
       </div>
 
+      {secim.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-2 bg-accent-soft rounded-lg px-3 py-2">
+          <span className="text-sm font-medium text-accent">
+            {secim.size.toLocaleString('tr-TR')} ürün seçildi
+          </span>
+          <button className="btn btn-tehlike btn-kucuk" onClick={secilenleriSil} disabled={siliniyor}>
+            <Trash2 size={14} aria-hidden /> {siliniyor ? 'Siliniyor…' : 'Seçilenleri sil'}
+          </button>
+          <button className="btn btn-ikincil btn-kucuk" onClick={() => setSecim(new Set())}>
+            Seçimi bırak
+          </button>
+        </div>
+      )}
+
       {urunlerHam === undefined ? (
         <Yukleniyor />
       ) : sonuclar.length === 0 ? (
@@ -164,6 +240,16 @@ export default function Katalog() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left border-b border-line bg-surface-2">
+                  <th className="pl-4 pr-1 py-2.5 w-8">
+                    <input
+                      type="checkbox"
+                      className="accent-[var(--accent)] w-4 h-4 align-middle"
+                      checked={tumuSecili}
+                      onChange={tumunuSecToggle}
+                      aria-label={`Listelenen ${sonuclar.length} ürünün tamamını seç`}
+                      title="Tümünü seç (filtrelenen tüm sonuçlar)"
+                    />
+                  </th>
                   <th className="px-4 py-2.5 font-semibold">Kart Kodu</th>
                   <th className="px-4 py-2.5 font-semibold">Açıklama</th>
                   <th className="px-4 py-2.5 font-semibold">Grup</th>
@@ -176,6 +262,15 @@ export default function Katalog() {
               <tbody>
                 {sonuclar.slice(0, limit).map((u) => (
                   <tr key={u.id} className="border-b border-line last:border-b-0 hover:bg-surface-2">
+                    <td className="pl-4 pr-1 py-2">
+                      <input
+                        type="checkbox"
+                        className="accent-[var(--accent)] w-4 h-4 align-middle"
+                        checked={secim.has(u.id!)}
+                        onChange={() => satirSecToggle(u.id!)}
+                        aria-label={`Seç: ${u.aciklama}`}
+                      />
+                    </td>
                     <td className="px-4 py-2 whitespace-nowrap text-ink-2">{u.kartKodu}</td>
                     <td className="px-4 py-2 font-medium">{u.aciklama}</td>
                     <td className="px-4 py-2">{u.grup || '—'}</td>

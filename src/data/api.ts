@@ -115,6 +115,25 @@ function hataFirlat(error: { message: string } | null): void {
   if (error) throw new Error(error.message)
 }
 
+// Supabase SELECT sorguları varsayılan olarak 1000 satırla sınırlıdır.
+// Bu yardımcı, kısa sayfa gelene dek 1000'lik dilimleri çekip birleştirir;
+// çağıran, her dilim için sorguyu (sıralama + filtre dahil) kurar.
+const SAYFA_BOYU = 1000
+
+async function hepsiniCek(
+  sorgu: (bas: number, son: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
+): Promise<Satir[]> {
+  const hepsi: Satir[] = []
+  for (let i = 0; ; i += SAYFA_BOYU) {
+    const { data, error } = await sorgu(i, i + SAYFA_BOYU - 1)
+    hataFirlat(error)
+    const sayfa = (data ?? []) as Satir[]
+    hepsi.push(...sayfa)
+    if (sayfa.length < SAYFA_BOYU) break
+  }
+  return hepsi
+}
+
 // ---------- ürünler ----------
 
 // Ürün listesi birden çok bileşende aynı anda okunur (Talepler + ProductSearch vb.);
@@ -125,9 +144,10 @@ export function urunListele(): Promise<Product[]> {
   const surum = getSnapshot()
   if (urunOnbellek && urunOnbellek.surum === surum) return urunOnbellek.sozveri
   const sozveri = (async () => {
-    const { data, error } = await supabase().from('products').select('*').order('kart_kodu')
-    hataFirlat(error)
-    return (data ?? []).map(urunOku)
+    const satirlar = await hepsiniCek((bas, son) =>
+      supabase().from('products').select('*').order('kart_kodu').order('id').range(bas, son),
+    )
+    return satirlar.map(urunOku)
   })()
   urunOnbellek = { surum, sozveri }
   sozveri.catch(() => {
@@ -187,6 +207,13 @@ export async function urunSil(id: number): Promise<void> {
   degisti()
 }
 
+/** Şirketin TÜM ürünlerini siler (RLS org ile sınırlar). */
+export async function tumUrunleriSil(): Promise<void> {
+  const { error } = await supabase().from('products').delete().gte('id', 0)
+  hataFirlat(error)
+  degisti()
+}
+
 export async function urunKaynaktanSil(kaynak: Product['kaynak']): Promise<void> {
   const { error } = await supabase().from('products').delete().eq('kaynak', kaynak)
   hataFirlat(error)
@@ -196,12 +223,15 @@ export async function urunKaynaktanSil(kaynak: Product['kaynak']): Promise<void>
 // ---------- talepler ----------
 
 export async function talepListele(): Promise<Demand[]> {
-  const { data, error } = await supabase()
-    .from('demands')
-    .select('*')
-    .order('created_at', { ascending: false })
-  hataFirlat(error)
-  return (data ?? []).map(talepOku)
+  const satirlar = await hepsiniCek((bas, son) =>
+    supabase()
+      .from('demands')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(bas, son),
+  )
+  return satirlar.map(talepOku)
 }
 
 export async function talepToptanEkle(liste: Demand[]): Promise<void> {
@@ -241,9 +271,10 @@ export interface RehberApi {
 function rehberApi(tablo: 'customers' | 'suppliers'): RehberApi {
   return {
     async listele() {
-      const { data, error } = await supabase().from(tablo).select('*').order('ad')
-      hataFirlat(error)
-      return (data ?? []) as RehberKaydi[]
+      const satirlar = await hepsiniCek((bas, son) =>
+        supabase().from(tablo).select('*').order('ad').order('id').range(bas, son),
+      )
+      return satirlar as unknown as RehberKaydi[]
     },
     async ekle(k) {
       const { data, error } = await supabase()
@@ -309,15 +340,17 @@ export async function listeSil(id: number): Promise<void> {
 }
 
 export async function kalemListele(listeId: number): Promise<OrderItem[]> {
-  const { data, error } = await supabase().from('order_items').select('*').eq('liste_id', listeId).order('id')
-  hataFirlat(error)
-  return (data ?? []).map(kalemOku)
+  const satirlar = await hepsiniCek((bas, son) =>
+    supabase().from('order_items').select('*').eq('liste_id', listeId).order('id').range(bas, son),
+  )
+  return satirlar.map(kalemOku)
 }
 
 export async function tumKalemler(): Promise<OrderItem[]> {
-  const { data, error } = await supabase().from('order_items').select('*')
-  hataFirlat(error)
-  return (data ?? []).map(kalemOku)
+  const satirlar = await hepsiniCek((bas, son) =>
+    supabase().from('order_items').select('*').order('id').range(bas, son),
+  )
+  return satirlar.map(kalemOku)
 }
 
 export async function kalemEkle(k: OrderItem): Promise<void> {
@@ -393,12 +426,15 @@ export interface DavetKodu {
 }
 
 export async function davetKodlariListele(): Promise<DavetKodu[]> {
-  const { data, error } = await supabase()
-    .from('invite_codes')
-    .select('code, note, created_at, used_at')
-    .order('created_at', { ascending: false })
-  hataFirlat(error)
-  return (data ?? []).map((r) => ({
+  const data = await hepsiniCek((bas, son) =>
+    supabase()
+      .from('invite_codes')
+      .select('code, note, created_at, used_at')
+      .order('created_at', { ascending: false })
+      .order('code')
+      .range(bas, son),
+  )
+  return data.map((r) => ({
     code: r.code as string,
     note: r.note as string,
     createdAt: r.created_at as string,
