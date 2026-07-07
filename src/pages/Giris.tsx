@@ -44,6 +44,27 @@ export default function Giris() {
     return true
   }
 
+  async function sifremiUnuttum() {
+    setHata('')
+    setBilgi('')
+    if (!eposta.trim()) {
+      setHata('Önce yukarıya e-posta adresinizi yazın, sonra bu bağlantıya tıklayın.')
+      return
+    }
+    setCalisiyor(true)
+    try {
+      const { error } = await supabase().auth.resetPasswordForEmail(eposta.trim(), {
+        redirectTo: window.location.origin + window.location.pathname,
+      })
+      if (error) throw error
+      setBilgi('Şifre sıfırlama bağlantısı e-postanıza gönderildi. Gelen kutusuyla birlikte spam klasörünü de kontrol edin; birkaç dakika sürebilir.')
+    } catch (e) {
+      setHata(hataMesaji(e))
+    } finally {
+      setCalisiyor(false)
+    }
+  }
+
   async function gonder() {
     setHata('')
     setBilgi('')
@@ -195,6 +216,16 @@ export default function Giris() {
                     ? 'Şirketi kur ve başla'
                     : 'Şirkete katıl'}
             </button>
+            {sekme === 'giris' && (
+              <button
+                type="button"
+                className="text-xs text-accent hover:underline justify-self-center"
+                onClick={sifremiUnuttum}
+                disabled={calisiyor}
+              >
+                Şifremi unuttum
+              </button>
+            )}
           </div>
         </div>
 

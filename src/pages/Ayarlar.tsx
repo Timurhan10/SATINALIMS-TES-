@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Building2, Copy, Download, HardDriveUpload, Moon, Sparkles, Sun, Trash2, Upload, UserPlus } from 'lucide-react'
+import {
+  Building2, Copy, Download, HardDriveUpload, Moon, Pencil, Sparkles, Sun, Trash2, Upload, UserMinus, UserPlus,
+} from 'lucide-react'
 import { tumVeriyiSil, yedekAl, yedekYukle } from '../data/backup'
 import { eskiYerelVeriOku, type EskiVeri } from '../data/eskiVeri'
-import { katilimKoduOlustur, uyeListele } from '../data/api'
+import { katilimKoduOlustur, sirketAdiDegistir, uyeCikar, uyeListele } from '../data/api'
 import { useVeri } from '../data/hooks'
 import { hataMesaji } from '../data/client'
 import { useAuth } from '../auth/AuthContext'
@@ -11,12 +13,14 @@ import { SayfaBaslik } from '../components/Parcalar'
 import { toast } from '../components/Toast'
 
 export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; setTema: (t: 'light' | 'dark') => void }) {
-  const { session, uyelik } = useAuth()
+  const { session, uyelik, uyelikYenile } = useAuth()
   const [anahtar, setAnahtar] = useState(aiAnahtariOku)
   const [katilimKodu, setKatilimKodu] = useState('')
   const [mesgul, setMesgul] = useState(false)
   const [eskiVeri, setEskiVeri] = useState<EskiVeri | null>(null)
   const [tasiniyor, setTasiniyor] = useState(false)
+  const [adDuzenleme, setAdDuzenleme] = useState(false)
+  const [yeniAd, setYeniAd] = useState('')
 
   const uyeler = useVeri(uyeListele) ?? []
   const sahipMi = uyelik?.rol === 'owner'
@@ -72,6 +76,34 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
     }
   }
 
+  async function adKaydet() {
+    if (!yeniAd.trim()) {
+      toast('Şirket adı boş olamaz.', 'hata')
+      return
+    }
+    setMesgul(true)
+    try {
+      await sirketAdiDegistir(yeniAd.trim())
+      await uyelikYenile()
+      setAdDuzenleme(false)
+      toast('Şirket adı güncellendi.')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    } finally {
+      setMesgul(false)
+    }
+  }
+
+  async function uyeyiCikar(userId: string, email: string) {
+    if (!window.confirm(`${email} şirketten çıkarılsın mı? Bu kişi artık verilere erişemez.`)) return
+    try {
+      await uyeCikar(userId)
+      toast('Üye çıkarıldı.')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
+  }
+
   return (
     <div className="max-w-2xl">
       <SayfaBaslik baslik="Ayarlar" aciklama="Şirket, tema, AI anahtarı ve veri yönetimi." />
@@ -81,10 +113,37 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
         <div className="mikro mb-2 flex items-center gap-1.5">
           <Building2 size={13} aria-hidden /> Şirket
         </div>
-        <p className="text-sm text-ink-2 mb-3">
-          <strong>{uyelik?.orgAd}</strong> · Hesabınız: {session?.user.email}
-          {sahipMi ? ' (şirket sahibi)' : ' (üye)'}
-        </p>
+        {adDuzenleme ? (
+          <div className="flex gap-2 mb-3">
+            <input
+              className="girdi flex-1"
+              value={yeniAd}
+              onChange={(e) => setYeniAd(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && adKaydet()}
+              aria-label="Yeni şirket adı"
+            />
+            <button className="btn btn-birincil btn-kucuk" onClick={adKaydet} disabled={mesgul}>Kaydet</button>
+            <button className="btn btn-ikincil btn-kucuk" onClick={() => setAdDuzenleme(false)}>Vazgeç</button>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-2 mb-3">
+            <strong>{uyelik?.orgAd}</strong>
+            {sahipMi && (
+              <button
+                className="text-ink-3 hover:text-accent p-1 align-middle"
+                onClick={() => {
+                  setYeniAd(uyelik?.orgAd ?? '')
+                  setAdDuzenleme(true)
+                }}
+                aria-label="Şirket adını değiştir"
+              >
+                <Pencil size={13} />
+              </button>
+            )}
+            {' '}· Hesabınız: {session?.user.email}
+            {sahipMi ? ' (şirket sahibi)' : ' (üye)'}
+          </p>
+        )}
 
         <div className="mb-3">
           <div className="text-xs font-medium text-ink-2 mb-1.5">Ekip ({uyeler.length} kişi)</div>
@@ -92,7 +151,19 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
             {uyeler.map((u) => (
               <div key={u.userId} className="flex items-center justify-between text-sm bg-surface-2 rounded-lg px-3 py-1.5">
                 <span className="truncate">{u.email}</span>
-                <span className="text-xs text-ink-3 shrink-0 ml-2">{u.rol === 'owner' ? 'Sahip' : 'Üye'}</span>
+                <span className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <span className="text-xs text-ink-3">{u.rol === 'owner' ? 'Sahip' : 'Üye'}</span>
+                  {sahipMi && u.rol !== 'owner' && u.userId !== session?.user.id && (
+                    <button
+                      className="text-ink-3 hover:text-bad p-1"
+                      onClick={() => uyeyiCikar(u.userId, u.email)}
+                      aria-label={`${u.email} üyesini çıkar`}
+                      title="Şirketten çıkar"
+                    >
+                      <UserMinus size={14} />
+                    </button>
+                  )}
+                </span>
               </div>
             ))}
           </div>

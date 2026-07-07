@@ -1,19 +1,35 @@
-// Platform yönetimi: satılacak davet kodlarını üret ve takip et.
+// Platform yönetimi: satılacak davet kodlarını üret/takip et, şirketleri yönet.
 // Yalnız platform yöneticisine görünür; yetki sunucuda da doğrulanır.
 import { useState } from 'react'
-import { Copy, KeyRound, Plus } from 'lucide-react'
-import { davetKodlariListele, davetKoduOlustur } from '../data/api'
+import { Building2, Copy, KeyRound, Pause, Play, Plus } from 'lucide-react'
+import { davetKodlariListele, davetKoduOlustur, orgAktiflik, orgListele } from '../data/api'
 import { useVeri } from '../data/hooks'
 import { hataMesaji } from '../data/client'
+import { useAuth } from '../auth/AuthContext'
 import { BosDurum, SayfaBaslik } from '../components/Parcalar'
 import { toast } from '../components/Toast'
 
 export default function Admin() {
+  const { uyelik } = useAuth()
   const [adet, setAdet] = useState('1')
   const [not_, setNot] = useState('')
   const [calisiyor, setCalisiyor] = useState(false)
 
   const kodlar = useVeri(davetKodlariListele) ?? []
+  const orglar = useVeri(orgListele) ?? []
+
+  async function aktiflikDegistir(id: string, ad: string, aktif: boolean) {
+    const mesaj = aktif
+      ? `"${ad}" şirketi yeniden aktifleştirilsin mi?`
+      : `"${ad}" şirketi askıya alınsın mı? Tüm kullanıcılarının erişimi anında kapanır (veriler silinmez).`
+    if (!window.confirm(mesaj)) return
+    try {
+      await orgAktiflik(id, aktif)
+      toast(aktif ? 'Şirket aktifleştirildi.' : 'Şirket askıya alındı.')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
+  }
 
   async function uret() {
     const n = Math.max(1, Math.min(50, parseInt(adet, 10) || 1))
@@ -74,6 +90,60 @@ export default function Admin() {
             <Plus size={16} aria-hidden /> {calisiyor ? 'Üretiliyor…' : 'Üret'}
           </button>
         </div>
+      </div>
+
+      {/* Şirketler */}
+      <div className="kart p-4 md:p-5 mb-5">
+        <div className="mikro mb-3 flex items-center gap-1.5">
+          <Building2 size={13} aria-hidden /> Şirketler ({orglar.length})
+        </div>
+        {orglar.length === 0 ? (
+          <p className="text-sm text-ink-3">Henüz şirket yok.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b border-line">
+                  <th className="pr-4 py-2 font-semibold">Şirket</th>
+                  <th className="pr-4 py-2 font-semibold">Üye</th>
+                  <th className="pr-4 py-2 font-semibold">Kayıt</th>
+                  <th className="pr-4 py-2 font-semibold">Durum</th>
+                  <th className="py-2" aria-label="İşlemler"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {orglar.map((o) => (
+                  <tr key={o.id} className="border-b border-line last:border-b-0">
+                    <td className="pr-4 py-2 font-medium">
+                      {o.ad}
+                      {o.id === uyelik?.orgId && <span className="text-xs text-ink-3 ml-1.5">(sizin şirketiniz)</span>}
+                    </td>
+                    <td className="pr-4 py-2 tnum">{o.uyeSayisi}</td>
+                    <td className="pr-4 py-2 whitespace-nowrap">{new Date(o.olusturma).toLocaleDateString('tr-TR')}</td>
+                    <td className="pr-4 py-2">
+                      {o.aktif ? (
+                        <span className="bg-ok-soft text-ok rounded-full px-2.5 py-0.5 text-xs font-semibold">Aktif</span>
+                      ) : (
+                        <span className="bg-bad-soft text-bad rounded-full px-2.5 py-0.5 text-xs font-semibold">Askıda</span>
+                      )}
+                    </td>
+                    <td className="py-2 whitespace-nowrap">
+                      {o.id !== uyelik?.orgId && (
+                        <button
+                          className={`btn btn-kucuk ${o.aktif ? 'btn-tehlike' : 'btn-birincil'}`}
+                          onClick={() => aktiflikDegistir(o.id, o.ad, !o.aktif)}
+                        >
+                          {o.aktif ? <Pause size={13} aria-hidden /> : <Play size={13} aria-hidden />}
+                          {o.aktif ? 'Askıya al' : 'Aktifleştir'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {kodlar.length === 0 ? (

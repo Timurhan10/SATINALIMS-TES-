@@ -254,77 +254,92 @@ export default function Katalog() {
 }
 
 function DuzeltModal({ urun, kapat }: { urun: Product | null; kapat: () => void }) {
-  const [form, setForm] = useState<Partial<Product>>({})
+  // Sayı alanları metin olarak tutulur; kaydederken doğrulanır.
+  const [form, setForm] = useState({ aciklama: '', grup: '', standart: '', olcuStr: '', boyStr: '', kalite: '' as Kalite })
+  const [yuklenenId, setYuklenenId] = useState<number | null>(null)
   const u = urun
-  const deger = (alan: keyof Product) => (form[alan] ?? u?.[alan] ?? '') as string
+
+  // Modal her yeni ürünle açıldığında formu o üründen doldur.
+  if (u?.id !== undefined && u.id !== yuklenenId) {
+    setYuklenenId(u.id)
+    setForm({
+      aciklama: u.aciklama,
+      grup: u.grup,
+      standart: u.standart,
+      olcuStr: u.olcu !== null ? String(u.olcu) : '',
+      boyStr: u.boyMm !== null ? String(u.boyMm) : '',
+      kalite: u.kalite,
+    })
+  }
+
+  function sayiCoz(metin: string): number | null | undefined {
+    const temiz = metin.trim()
+    if (!temiz) return null
+    const n = parseFloat(temiz.replace(',', '.'))
+    return Number.isFinite(n) ? n : undefined // undefined = geçersiz girdi
+  }
 
   async function kaydet() {
     if (!u?.id) return
-    const olcuHam = form.olcu !== undefined ? form.olcu : u.olcu
-    const boyHam = form.boyMm !== undefined ? form.boyMm : u.boyMm
-    const olcu = typeof olcuHam === 'string' ? (olcuHam === '' ? null : parseFloat(String(olcuHam).replace(',', '.'))) : olcuHam
-    const boyMm = typeof boyHam === 'string' ? (boyHam === '' ? null : parseFloat(String(boyHam).replace(',', '.'))) : boyHam
+    const olcu = sayiCoz(form.olcuStr)
+    const boyMm = sayiCoz(form.boyStr)
+    if (olcu === undefined || boyMm === undefined) {
+      toast('Ölçü/Boy alanına geçerli bir sayı girin (örn. 8 veya 4,8).', 'hata')
+      return
+    }
     try {
       await urunGuncelle(u.id, {
-        aciklama: trUpper(String(form.aciklama ?? u.aciklama)),
-        grup: trUpper(String(form.grup ?? u.grup)),
-        standart: String(form.standart ?? u.standart),
-        olcu: Number.isFinite(olcu as number) ? (olcu as number) : null,
-        boyMm: Number.isFinite(boyMm as number) ? (boyMm as number) : null,
-        kalite: (form.kalite ?? u.kalite) as Kalite,
-        boyutMetni:
-          olcu != null && Number.isFinite(olcu as number)
-            ? boyMm != null && Number.isFinite(boyMm as number)
-              ? `M${olcu}x${boyMm}`
-              : `M${olcu}`
-            : '',
+        aciklama: trUpper(form.aciklama),
+        grup: trUpper(form.grup),
+        standart: form.standart,
+        olcu,
+        boyMm,
+        kalite: form.kalite,
+        boyutMetni: olcu !== null ? (boyMm !== null ? `M${olcu}x${boyMm}` : `M${olcu}`) : '',
       })
       toast('Ürün güncellendi.')
-      setForm({})
+      setYuklenenId(null)
       kapat()
     } catch (e) {
       toast(hataMesaji(e), 'hata')
     }
   }
 
+  function vazgec() {
+    setYuklenenId(null)
+    kapat()
+  }
+
   return (
-    <Modal baslik="Ürünü Düzelt" acik={Boolean(u)} kapat={() => { setForm({}); kapat() }}>
+    <Modal baslik="Ürünü Düzelt" acik={Boolean(u)} kapat={vazgec}>
       {u && (
         <div className="grid gap-3">
           <div>
             <label className="text-xs font-medium text-ink-2 block mb-1">Açıklama</label>
-            <input className="girdi" value={deger('aciklama')} onChange={(e) => setForm({ ...form, aciklama: e.target.value })} />
+            <input className="girdi" value={form.aciklama} onChange={(e) => setForm({ ...form, aciklama: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-ink-2 block mb-1">Grup</label>
-              <input className="girdi" value={deger('grup')} onChange={(e) => setForm({ ...form, grup: e.target.value })} />
+              <input className="girdi" value={form.grup} onChange={(e) => setForm({ ...form, grup: e.target.value })} />
             </div>
             <div>
               <label className="text-xs font-medium text-ink-2 block mb-1">DIN (örn. DIN 933)</label>
-              <input className="girdi" value={deger('standart')} onChange={(e) => setForm({ ...form, standart: e.target.value })} />
+              <input className="girdi" value={form.standart} onChange={(e) => setForm({ ...form, standart: e.target.value })} />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-medium text-ink-2 block mb-1">Ölçü (M)</label>
-              <input
-                className="girdi"
-                value={form.olcu !== undefined ? String(form.olcu ?? '') : String(u.olcu ?? '')}
-                onChange={(e) => setForm({ ...form, olcu: e.target.value as unknown as number })}
-              />
+              <input className="girdi" value={form.olcuStr} onChange={(e) => setForm({ ...form, olcuStr: e.target.value })} />
             </div>
             <div>
               <label className="text-xs font-medium text-ink-2 block mb-1">Boy (mm)</label>
-              <input
-                className="girdi"
-                value={form.boyMm !== undefined ? String(form.boyMm ?? '') : String(u.boyMm ?? '')}
-                onChange={(e) => setForm({ ...form, boyMm: e.target.value as unknown as number })}
-              />
+              <input className="girdi" value={form.boyStr} onChange={(e) => setForm({ ...form, boyStr: e.target.value })} />
             </div>
             <div>
               <label className="text-xs font-medium text-ink-2 block mb-1">Kalite</label>
-              <select className="girdi" value={(form.kalite ?? u.kalite) as string} onChange={(e) => setForm({ ...form, kalite: e.target.value as Kalite })}>
+              <select className="girdi" value={form.kalite} onChange={(e) => setForm({ ...form, kalite: e.target.value as Kalite })}>
                 <option value="">—</option>
                 <option value="A2">A2</option>
                 <option value="A4">A4</option>
@@ -333,7 +348,7 @@ function DuzeltModal({ urun, kapat }: { urun: Product | null; kapat: () => void 
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-1">
-            <button className="btn btn-ikincil" onClick={() => { setForm({}); kapat() }}>Vazgeç</button>
+            <button className="btn btn-ikincil" onClick={vazgec}>Vazgeç</button>
             <button className="btn btn-birincil" onClick={kaydet}>Kaydet</button>
           </div>
         </div>

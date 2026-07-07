@@ -4,7 +4,7 @@
 // default current_org_id() doldurur, RLS doğrular.
 import type { Customer, Demand, OrderItem, OrderList, Product, Supplier } from '../types'
 import { supabase } from './client'
-import { degisti } from './store'
+import { degisti, getSnapshot } from './store'
 
 // ---------- mapper'lar ----------
 
@@ -117,10 +117,23 @@ function hataFirlat(error: { message: string } | null): void {
 
 // ---------- ürünler ----------
 
-export async function urunListele(): Promise<Product[]> {
-  const { data, error } = await supabase().from('products').select('*').order('kart_kodu')
-  hataFirlat(error)
-  return (data ?? []).map(urunOku)
+// Ürün listesi birden çok bileşende aynı anda okunur (Talepler + ProductSearch vb.);
+// aynı veri sürümü içinde tek sorgu atılır, mutasyon (degisti) sürümü artırınca tazelenir.
+let urunOnbellek: { surum: number; sozveri: Promise<Product[]> } | null = null
+
+export function urunListele(): Promise<Product[]> {
+  const surum = getSnapshot()
+  if (urunOnbellek && urunOnbellek.surum === surum) return urunOnbellek.sozveri
+  const sozveri = (async () => {
+    const { data, error } = await supabase().from('products').select('*').order('kart_kodu')
+    hataFirlat(error)
+    return (data ?? []).map(urunOku)
+  })()
+  urunOnbellek = { surum, sozveri }
+  sozveri.catch(() => {
+    if (urunOnbellek?.sozveri === sozveri) urunOnbellek = null // hata önbelleğe alınmaz
+  })
+  return sozveri
 }
 
 export async function urunSay(): Promise<number> {
@@ -352,6 +365,24 @@ export async function katilimKoduOlustur(): Promise<string> {
   return data as string
 }
 
+export async function uyeCikar(userId: string): Promise<void> {
+  const { error } = await supabase().rpc('uye_cikar', { hedef: userId })
+  hataFirlat(error)
+  degisti()
+}
+
+export async function sirketAdiDegistir(yeniAd: string): Promise<void> {
+  const { error } = await supabase().rpc('sirket_adi_degistir', { yeni_ad: yeniAd })
+  hataFirlat(error)
+  degisti()
+}
+
+export async function adminMiyim(): Promise<boolean> {
+  const { data, error } = await supabase().rpc('admin_miyim')
+  hataFirlat(error)
+  return Boolean(data)
+}
+
 // ---------- platform yönetimi (davet kodları) ----------
 
 export interface DavetKodu {
@@ -379,4 +410,30 @@ export async function davetKoduOlustur(adet: number, aciklama: string): Promise<
   const { data, error } = await supabase().rpc('davet_kodu_olustur', { adet, aciklama })
   hataFirlat(error)
   return (data ?? []) as string[]
+}
+
+export interface OrgOzet {
+  id: string
+  ad: string
+  olusturma: string
+  aktif: boolean
+  uyeSayisi: number
+}
+
+export async function orgListele(): Promise<OrgOzet[]> {
+  const { data, error } = await supabase().rpc('org_listele')
+  hataFirlat(error)
+  return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    id: r.org_id as string,
+    ad: r.org_ad as string,
+    olusturma: r.olusturma as string,
+    aktif: Boolean(r.aktif),
+    uyeSayisi: Number(r.uye_sayisi ?? 0),
+  }))
+}
+
+export async function orgAktiflik(id: string, aktif: boolean): Promise<void> {
+  const { error } = await supabase().rpc('org_aktiflik', { hedef: id, aktif })
+  hataFirlat(error)
+  degisti()
 }

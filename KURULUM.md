@@ -27,6 +27,21 @@ Toplam süre: ~10 dakika. Kredi kartı gerekmez, ücretsiz planla başlar.
 3. Bu repodaki **`supabase/schema.sql`** dosyasının içeriğinin **TAMAMINI** kopyalayıp yapıştırın.
 4. Sağ alttaki **Run** düğmesine basın. "Success. No rows returned" görmelisiniz.
 
+## 3b. Güncellemeler (mevcut projeler için)
+
+Şema zaten kuruluysa yeni sürüm göçlerini aynı yöntemle (SQL Editor → New query → Run)
+sırayla çalıştırın:
+
+1. `supabase/migration-adet.sql` — talep başına adet alanı
+2. `supabase/migration-2.sql` — davet kodu üretim düzeltmesi, şirket askıya alma,
+   üye çıkarma, platform yöneticisi tablosu
+
+## 3c. Site URL'i ayarlayın (şifre sıfırlama için gerekli)
+
+1. Sol menü: **Authentication → URL Configuration**.
+2. **Site URL** alanına yazın: `https://timurhan10.github.io/SATINALIMS-TES-/`
+3. **Save** deyin. (Şifre sıfırlama e-postasındaki bağlantı kullanıcıyı bu adrese döndürür.)
+
 ## 4. E-posta onayını kapatın
 
 Kayıt zaten davet koduyla kısıtlı olduğu için e-posta onayına gerek yok:
@@ -90,6 +105,10 @@ ile de aktarabilirsiniz.
 - **Ücretsiz plan sınırları:** 500 MB veritabanı (yüz binlerce kayıt), 2 aktif proje.
   Proje **~1 hafta hiç kullanılmazsa** Supabase duraklatır — Dashboard'dan tek tıkla
   **Restore** edilir. Günlük kullanımda bu sorun olmaz.
-- **Şifre sıfırlama:** Şimdilik Supabase Dashboard'dan yapılır:
-  **Authentication → Users** → kullanıcıyı bulun → ⋮ menüsü → **Send password recovery**.
+- **Şifre sıfırlama:** Kullanıcılar giriş ekranındaki **"Şifremi unuttum"** bağlantısını
+  kullanır (adım 3c'deki Site URL ayarı gerekir). Not: özel SMTP bağlanmadıkça Supabase
+  saatte yalnızca birkaç e-posta gönderir ve bunlar spam klasörüne düşebilir.
+- **Şirket askıya alma:** Ödemeyi durduran müşteriyi **Platform Yönetimi → Şirketler**
+  bölümünden askıya alabilirsiniz; verileri silinmez, erişimleri anında kapanır,
+  tekrar aktifleştirebilirsiniz.
 - **Yedek:** Veriler Supabase'te güvende; yine de arada **Ayarlar → Yedek indir** iyi alışkanlıktır.

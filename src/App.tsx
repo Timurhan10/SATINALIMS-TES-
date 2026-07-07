@@ -16,12 +16,12 @@ import Ayarlar from './pages/Ayarlar'
 import Giris from './pages/Giris'
 import OrgKurulum from './pages/OrgKurulum'
 import KurulumBekleniyor from './pages/KurulumBekleniyor'
+import YeniSifre from './pages/YeniSifre'
 import Admin from './pages/Admin'
 import { ToastAlani } from './components/Toast'
 import Logo from './components/Logo'
 import { useAuth } from './auth/AuthContext'
 import { hasConfig } from './data/client'
-import { ADMIN_EPOSTA } from './supabaseConfig'
 
 const MENU = [
   { yol: '/panel', ad: 'Panel', Ikon: LayoutDashboard },
@@ -41,9 +41,30 @@ function temaTercihi(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+function AskidaEkrani() {
+  const { uyelik, cikisYap } = useAuth()
+  return (
+    <div className="min-h-screen grid place-items-center px-4">
+      <div className="kart max-w-md w-full p-6 md:p-8 text-center">
+        <div className="mb-4">
+          <Logo boyut="buyuk" />
+        </div>
+        <h1 className="font-semibold mb-2">Hesabınız askıya alındı</h1>
+        <p className="text-sm text-ink-2 leading-relaxed mb-4">
+          <strong>{uyelik?.orgAd}</strong> şirketinin erişimi geçici olarak durduruldu.
+          Verileriniz silinmedi; erişimi yeniden açmak için sistem sağlayıcınızla iletişime geçin.
+        </p>
+        <button className="btn btn-ikincil" onClick={cikisYap}>
+          <LogOut size={15} aria-hidden /> Çıkış yap
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [tema, setTema] = useState<'light' | 'dark'>(temaTercihi)
-  const { session, uyelik, yukleniyor, cikisYap } = useAuth()
+  const { session, uyelik, adminMi, sifreYenileme, yukleniyor, cikisYap } = useAuth()
 
   useEffect(() => {
     document.documentElement.dataset.theme = tema
@@ -65,6 +86,14 @@ export default function App() {
       </>
     )
   }
+  if (sifreYenileme) {
+    return (
+      <>
+        <YeniSifre />
+        <ToastAlani />
+      </>
+    )
+  }
   if (!uyelik) {
     return (
       <>
@@ -73,8 +102,14 @@ export default function App() {
       </>
     )
   }
-
-  const adminMi = (session.user.email ?? '').toLowerCase() === ADMIN_EPOSTA
+  if (!uyelik.aktif) {
+    return (
+      <>
+        <AskidaEkrani />
+        <ToastAlani />
+      </>
+    )
+  }
 
   return (
     <div className="min-h-screen md:flex">

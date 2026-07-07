@@ -12,7 +12,9 @@ let istemci: SupabaseClient | null = null
 export function supabase(): SupabaseClient {
   if (!istemci) {
     if (!hasConfig()) throw new Error('Supabase yapılandırması eksik')
-    istemci = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    // PKCE: şifre sıfırlama dönüşü ?code= parametresiyle gelir,
+    // HashRouter'ın # kısmıyla çakışmaz.
+    istemci = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { flowType: 'pkce' } })
   }
   return istemci
 }
@@ -26,6 +28,12 @@ export function hataMesaji(e: unknown): string {
   if (m.includes('SADECE_SAHIP')) return 'Bu işlemi yalnızca şirket sahibi yapabilir.'
   if (m.includes('YETKISIZ')) return 'Bu işlem için yetkiniz yok.'
   if (m.includes('GIRIS_GEREKLI')) return 'Önce giriş yapmalısınız.'
+  if (m.includes('CIKARILAMAZ')) return 'Bu üye çıkarılamaz (şirket sahibi ve kendi hesabınız çıkarılamaz).'
+  if (m.includes('duplicate key')) return 'Bu kayıt zaten mevcut (aynı ad/kod).'
+  if (m.includes('different from the old password')) return 'Yeni şifre eskisiyle aynı olamaz.'
+  if (m.includes('rate limit') || m.includes('security purposes')) {
+    return 'Çok sık denediniz; birkaç dakika bekleyip tekrar deneyin.'
+  }
   if (m.includes('Invalid login credentials')) return 'E-posta veya şifre hatalı.'
   if (m.includes('User already registered')) return 'Bu e-posta ile zaten kayıt olunmuş. Giriş yapmayı deneyin.'
   if (m.includes('Password should be at least')) return 'Şifre en az 6 karakter olmalı.'

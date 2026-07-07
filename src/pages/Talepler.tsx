@@ -23,12 +23,21 @@ interface SecimSatiri {
   adet: number
 }
 
-/** Müşteri adından id bulur; yoksa oluşturur. */
+/** Müşteri adından id bulur; yoksa oluşturur. İki kişinin aynı anda aynı yeni
+ *  firmayı kaydetmesi durumuna karşı: ekleme çakışırsa liste yeniden okunur. */
 async function musteriIdBul(ad: string): Promise<number> {
   const temiz = ad.trim()
-  const mevcut = (await musteriListele()).find((m) => trLower(m.ad) === trLower(temiz))
+  const bul = (liste: Awaited<ReturnType<typeof musteriListele>>) =>
+    liste.find((m) => trLower(m.ad) === trLower(temiz))
+  const mevcut = bul(await musteriListele())
   if (mevcut?.id) return mevcut.id
-  return (await musteriApi.ekle({ ad: temiz, telefon: '', email: '' })).id!
+  try {
+    return (await musteriApi.ekle({ ad: temiz, telefon: '', email: '' })).id!
+  } catch (e) {
+    const tekrar = bul(await musteriListele())
+    if (tekrar?.id) return tekrar.id
+    throw e
+  }
 }
 
 export default function Talepler() {

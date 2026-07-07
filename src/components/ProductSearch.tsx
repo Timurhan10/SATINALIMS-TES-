@@ -1,6 +1,6 @@
 // Akıllı ürün arama: serbest metin (parser) + GRUP + KALİTE filtreleri.
 // Talepler'de çoklu seçim, sipariş listelerinde tekli ekleme için kullanılır.
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { urunListele } from '../data/api'
@@ -42,6 +42,7 @@ export default function ProductSearch({
   }, [metin, grup, kalite, urunler])
 
   const aramaVar = Boolean(metin.trim() || grup || kalite)
+  const sonucAlani = useRef<HTMLDivElement>(null)
 
   return (
     <div>
@@ -53,6 +54,13 @@ export default function ProductSearch({
             placeholder='Örn: "imbus a2", "933 8*30", "471/10", "somun 8"…'
             value={metin}
             onChange={(e) => setMetin(e.target.value)}
+            onKeyDown={(e) => {
+              // ↓ tuşu ilk sonuca (onay kutusu/düğme) odak taşır — klavyeyle seçim
+              if (e.key === 'ArrowDown' && sonuclar.length > 0) {
+                e.preventDefault()
+                sonucAlani.current?.querySelector<HTMLElement>('input, button')?.focus()
+              }
+            }}
             aria-label="Ürün ara"
           />
         </div>
@@ -77,7 +85,7 @@ export default function ProductSearch({
               {sonuclar.length} sonuç {tamEslesme ? '· tam eşleşme' : sonuclar.length > 0 ? '· en yakın öneriler' : ''}
             </span>
           </div>
-          <div className="max-h-72 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto" ref={sonucAlani}>
             {sonuclar.map((u) => {
               const secili = u.id !== undefined && seciliIdler?.has(u.id)
               return (
