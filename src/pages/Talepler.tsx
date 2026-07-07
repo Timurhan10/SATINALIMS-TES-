@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Sparkles, Trash2 } from 'lucide-react'
 import {
   musteriApi, musteriListele, talepGuncelle, talepListele, talepSil, talepToptanEkle,
   urunEkle, urunListele,
@@ -78,6 +78,31 @@ export default function Talepler() {
       return trLower(`${t.serbestMetin} ${urunAd} ${firmaAd}`).includes(q)
     })
   }, [talepler, listeArama, listeDurum, urunMap, musteriAd])
+
+  // ---- firma bazlı gruplama ----
+  const [acikFirmalar, setAcikFirmalar] = useState<Set<number>>(new Set())
+  const aramaAktif = Boolean(listeArama.trim())
+
+  const firmaGruplari = useMemo(() => {
+    const m = new Map<number, Demand[]>()
+    for (const t of goruntulenen) {
+      const liste = m.get(t.customerId) ?? []
+      liste.push(t) // goruntulenen zaten en yeni üstte sıralı
+      m.set(t.customerId, liste)
+    }
+    return [...m.entries()]
+      .map(([customerId, liste]) => ({ customerId, liste }))
+      .sort((a, b) => b.liste[0].createdAt - a.liste[0].createdAt)
+  }, [goruntulenen])
+
+  function firmaToggle(customerId: number) {
+    setAcikFirmalar((eski) => {
+      const yeni = new Set(eski)
+      if (yeni.has(customerId)) yeni.delete(customerId)
+      else yeni.add(customerId)
+      return yeni
+    })
+  }
 
   function toggleUrun(u: Product) {
     if (u.id === undefined) return
@@ -331,89 +356,137 @@ export default function Talepler() {
       ) : goruntulenen.length === 0 ? (
         <BosDurum mesaj="Kayıtlı talep yok" alt="Yukarıdaki formdan ilk talebi ekleyin." />
       ) : (
-        <div className="kart overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left border-b border-line bg-surface-2">
-                <th className="px-4 py-2.5 font-semibold">Tarih</th>
-                <th className="px-4 py-2.5 font-semibold">Firma</th>
-                <th className="px-4 py-2.5 font-semibold">Ürün / Talep</th>
-                <th className="px-4 py-2.5 font-semibold">Adet</th>
-                <th className="px-4 py-2.5 font-semibold">Durum</th>
-                <th className="px-4 py-2.5 font-semibold">Kayıp nedeni</th>
-                <th className="px-2 py-2.5" aria-label="İşlemler"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {goruntulenen.map((t) => {
-                const u = t.productId ? urunMap.get(t.productId) : undefined
-                return (
-                  <tr key={t.id} className="border-b border-line last:border-b-0 align-top">
-                    <td className="px-4 py-2.5 whitespace-nowrap">{t.tarih}</td>
-                    <td className="px-4 py-2.5">{musteriAd.get(t.customerId) ?? '—'}</td>
-                    <td className="px-4 py-2.5">
-                      <div className="font-medium">{u?.aciklama ?? t.serbestMetin}</div>
-                      {u && t.serbestMetin && t.serbestMetin !== u.aciklama && (
-                        <div className="text-xs text-ink-3">“{t.serbestMetin}”</div>
-                      )}
-                      {!u && <div className="text-xs text-warn">katalog dışı</div>}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <AdetKutusu deger={t.adet} onKaydet={(n) => talepDuzelt(t.id!, { adet: n })} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <DurumRozeti durum={t.durum} />
-                        <select
-                          className="girdi w-auto btn-kucuk !py-1 !px-2 text-xs"
-                          value={t.durum}
-                          onChange={(e) => durumGuncelle(t, e.target.value as DemandDurum)}
-                          aria-label="Durumu değiştir"
-                        >
-                          {(Object.keys(DURUM_ETIKET) as DemandDurum[]).map((d) => (
-                            <option key={d} value={d}>{DURUM_ETIKET[d]}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {t.durum === 'VERILMEDI' ? (
-                        <select
-                          className="girdi w-auto !py-1 !px-2 text-xs"
-                          value={t.kayipNedeni || KAYIP_NEDENLERI[0]}
-                          onChange={(e) => talepDuzelt(t.id!, { kayipNedeni: e.target.value })}
-                          aria-label="Kayıp nedeni"
-                        >
-                          {KAYIP_NEDENLERI.map((n) => (
-                            <option key={n} value={n}>{n}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-ink-3">—</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <button
-                        className="text-ink-3 hover:text-bad p-1"
-                        onClick={async () => {
-                          if (!window.confirm('Bu talep silinsin mi?')) return
-                          try {
-                            await talepSil(t.id!)
-                            toast('Talep silindi.')
-                          } catch (e) {
-                            toast(hataMesaji(e), 'hata')
-                          }
-                        }}
-                        aria-label="Talebi sil"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <div className="grid gap-3">
+          {firmaGruplari.map((g) => {
+            const acik = aramaAktif || acikFirmalar.has(g.customerId)
+            const toplamAdet = g.liste.reduce((a, t) => a + t.adet, 0)
+            const sayilar = {
+              BEKLEMEDE: g.liste.filter((t) => t.durum === 'BEKLEMEDE').length,
+              VERILDI: g.liste.filter((t) => t.durum === 'VERILDI').length,
+              VERILMEDI: g.liste.filter((t) => t.durum === 'VERILMEDI').length,
+            }
+            const rozetSinif: Record<DemandDurum, string> = {
+              BEKLEMEDE: 'bg-warn-soft text-warn',
+              VERILDI: 'bg-ok-soft text-ok',
+              VERILMEDI: 'bg-bad-soft text-bad',
+            }
+            return (
+              <div key={g.customerId} className="kart overflow-hidden">
+                <button
+                  className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-surface-2"
+                  onClick={() => firmaToggle(g.customerId)}
+                  aria-expanded={acik}
+                >
+                  {acik ? (
+                    <ChevronDown size={16} className="text-ink-3 shrink-0" aria-hidden />
+                  ) : (
+                    <ChevronRight size={16} className="text-ink-3 shrink-0" aria-hidden />
+                  )}
+                  <span className="font-semibold truncate">{musteriAd.get(g.customerId) ?? '—'}</span>
+                  <span className="bg-accent-soft text-accent rounded-full px-2.5 py-0.5 text-xs font-semibold tnum">
+                    {g.liste.length} talep
+                  </span>
+                  <span className="text-xs text-ink-3 tnum">{toplamAdet.toLocaleString('tr-TR')} adet</span>
+                  <span className="flex gap-1.5 ml-auto">
+                    {(Object.keys(sayilar) as DemandDurum[]).map(
+                      (d) =>
+                        sayilar[d] > 0 && (
+                          <span key={d} className={`rounded-full px-2 py-0.5 text-xs font-semibold tnum ${rozetSinif[d]}`}>
+                            {sayilar[d]} {DURUM_ETIKET[d].toLocaleLowerCase('tr-TR')}
+                          </span>
+                        ),
+                    )}
+                  </span>
+                  <span className="text-xs text-ink-3 whitespace-nowrap">son: {g.liste[0].tarih}</span>
+                </button>
+
+                {acik && (
+                  <div className="border-t border-line overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left border-b border-line bg-surface-2">
+                          <th className="px-4 py-2 font-semibold">Tarih</th>
+                          <th className="px-4 py-2 font-semibold">Ürün / Talep</th>
+                          <th className="px-4 py-2 font-semibold">Adet</th>
+                          <th className="px-4 py-2 font-semibold">Durum</th>
+                          <th className="px-4 py-2 font-semibold">Kayıp nedeni</th>
+                          <th className="px-2 py-2" aria-label="İşlemler"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.liste.map((t) => {
+                          const u = t.productId ? urunMap.get(t.productId) : undefined
+                          return (
+                            <tr key={t.id} className="border-b border-line last:border-b-0 align-top">
+                              <td className="px-4 py-2.5 whitespace-nowrap">{t.tarih}</td>
+                              <td className="px-4 py-2.5">
+                                <div className="font-medium">{u?.aciklama ?? t.serbestMetin}</div>
+                                {u && t.serbestMetin && t.serbestMetin !== u.aciklama && (
+                                  <div className="text-xs text-ink-3">“{t.serbestMetin}”</div>
+                                )}
+                                {!u && <div className="text-xs text-warn">katalog dışı</div>}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <AdetKutusu deger={t.adet} onKaydet={(n) => talepDuzelt(t.id!, { adet: n })} />
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <DurumRozeti durum={t.durum} />
+                                  <select
+                                    className="girdi w-auto btn-kucuk !py-1 !px-2 text-xs"
+                                    value={t.durum}
+                                    onChange={(e) => durumGuncelle(t, e.target.value as DemandDurum)}
+                                    aria-label="Durumu değiştir"
+                                  >
+                                    {(Object.keys(DURUM_ETIKET) as DemandDurum[]).map((d) => (
+                                      <option key={d} value={d}>{DURUM_ETIKET[d]}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {t.durum === 'VERILMEDI' ? (
+                                  <select
+                                    className="girdi w-auto !py-1 !px-2 text-xs"
+                                    value={t.kayipNedeni || KAYIP_NEDENLERI[0]}
+                                    onChange={(e) => talepDuzelt(t.id!, { kayipNedeni: e.target.value })}
+                                    aria-label="Kayıp nedeni"
+                                  >
+                                    {KAYIP_NEDENLERI.map((n) => (
+                                      <option key={n} value={n}>{n}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="text-ink-3">—</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-2.5">
+                                <button
+                                  className="text-ink-3 hover:text-bad p-1"
+                                  onClick={async () => {
+                                    if (!window.confirm('Bu talep silinsin mi?')) return
+                                    try {
+                                      await talepSil(t.id!)
+                                      toast('Talep silindi.')
+                                    } catch (e) {
+                                      toast(hataMesaji(e), 'hata')
+                                    }
+                                  }}
+                                  aria-label="Talebi sil"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 

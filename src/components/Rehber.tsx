@@ -1,6 +1,8 @@
 // Müşteriler ve Tedarikçiler için ortak basit rehber bileşeni.
-import { useState } from 'react'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+// `detay` verilirse satırlar tıklanınca altında detay içeriği açılır.
+import { Fragment, useState } from 'react'
+import type { ReactNode } from 'react'
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { RehberApi, RehberKaydi } from '../data/api'
 import { useVeri } from '../data/hooks'
 import { hataMesaji } from '../data/client'
@@ -17,14 +19,18 @@ interface Props {
   tekil: string // "müşteri" | "tedarikçi"
   api: RehberApi
   ekSutun?: { baslik: string; deger: (id: number) => number } // talep sayısı vb.
+  detay?: (id: number) => ReactNode // satıra tıklayınca açılan içerik
 }
 
-export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props) {
+export default function Rehber({ baslik, aciklama, tekil, api, ekSutun, detay }: Props) {
   const [arama, setArama] = useState('')
   const [duzenlenen, setDuzenlenen] = useState<RehberKaydi | null>(null)
   const [modalAcik, setModalAcik] = useState(false)
   const [form, setForm] = useState<RehberKaydi>({ ad: '', telefon: '', email: '' })
   const [kaydediliyor, setKaydediliyor] = useState(false)
+  const [acikId, setAcikId] = useState<number | null>(null)
+
+  const sutunSayisi = 4 + (detay ? 1 : 0) + (ekSutun ? 1 : 0)
 
   const kayitlarHam = useVeri(api.listele)
   const kayitlar = kayitlarHam ?? []
@@ -87,6 +93,7 @@ export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props)
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left border-b border-line bg-surface-2">
+                {detay && <th className="pl-3 w-6" aria-label="Aç/kapat"></th>}
                 <th className="px-4 py-2.5 font-semibold">Ad</th>
                 <th className="px-4 py-2.5 font-semibold">Telefon</th>
                 <th className="px-4 py-2.5 font-semibold">E-posta</th>
@@ -96,38 +103,64 @@ export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props)
             </thead>
             <tbody>
               {filtreli.map((k) => (
-                <tr key={k.id} className="border-b border-line last:border-b-0 hover:bg-surface-2">
-                  <td className="px-4 py-2.5 font-medium">{k.ad}</td>
-                  <td className="px-4 py-2.5 whitespace-nowrap">{k.telefon || '—'}</td>
-                  <td className="px-4 py-2.5">{k.email || '—'}</td>
-                  {ekSutun && (
-                    <td className="px-4 py-2.5">
-                      <span className="bg-accent-soft text-accent rounded-full px-2.5 py-0.5 text-xs font-semibold tnum">
-                        {ekSutun.deger(k.id!)}
-                      </span>
+                <Fragment key={k.id}>
+                  <tr
+                    className={`border-b border-line last:border-b-0 hover:bg-surface-2 ${detay ? 'cursor-pointer' : ''}`}
+                    onClick={detay ? () => setAcikId(acikId === k.id ? null : k.id!) : undefined}
+                    aria-expanded={detay ? acikId === k.id : undefined}
+                  >
+                    {detay && (
+                      <td className="pl-3 py-2.5 text-ink-3">
+                        {acikId === k.id ? <ChevronDown size={15} aria-hidden /> : <ChevronRight size={15} aria-hidden />}
+                      </td>
+                    )}
+                    <td className="px-4 py-2.5 font-medium">{k.ad}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">{k.telefon || '—'}</td>
+                    <td className="px-4 py-2.5">{k.email || '—'}</td>
+                    {ekSutun && (
+                      <td className="px-4 py-2.5">
+                        <span className="bg-accent-soft text-accent rounded-full px-2.5 py-0.5 text-xs font-semibold tnum">
+                          {ekSutun.deger(k.id!)}
+                        </span>
+                      </td>
+                    )}
+                    <td className="px-2 py-2.5 whitespace-nowrap">
+                      <button
+                        className="text-ink-3 hover:text-accent p-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          ac(k)
+                        }}
+                        aria-label="Düzenle"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="text-ink-3 hover:text-bad p-1"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (!window.confirm(`"${k.ad}" silinsin mi?`)) return
+                          try {
+                            await api.sil(k.id!)
+                            toast('Silindi.')
+                          } catch (err) {
+                            toast(hataMesaji(err), 'hata')
+                          }
+                        }}
+                        aria-label="Sil"
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </td>
+                  </tr>
+                  {detay && acikId === k.id && (
+                    <tr className="border-b border-line last:border-b-0">
+                      <td colSpan={sutunSayisi} className="bg-surface-2 px-4 py-3">
+                        {detay(k.id!)}
+                      </td>
+                    </tr>
                   )}
-                  <td className="px-2 py-2.5 whitespace-nowrap">
-                    <button className="text-ink-3 hover:text-accent p-1" onClick={() => ac(k)} aria-label="Düzenle">
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      className="text-ink-3 hover:text-bad p-1"
-                      onClick={async () => {
-                        if (!window.confirm(`"${k.ad}" silinsin mi?`)) return
-                        try {
-                          await api.sil(k.id!)
-                          toast('Silindi.')
-                        } catch (e) {
-                          toast(hataMesaji(e), 'hata')
-                        }
-                      }}
-                      aria-label="Sil"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
-                </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
