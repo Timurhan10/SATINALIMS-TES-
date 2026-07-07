@@ -122,6 +122,7 @@ create table public.demands (
   kalite text not null default '',
   durum text not null default 'BEKLEMEDE' check (durum in ('BEKLEMEDE', 'VERILDI', 'VERILMEDI')),
   kayip_nedeni text not null default '',
+  adet integer not null default 1, -- kaç adet soruldu
   created_at bigint not null -- epoch ms
 );
 create index demands_org_created on public.demands (org_id, created_at desc);

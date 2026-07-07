@@ -49,6 +49,7 @@ export interface Demand {
   kalite: Kalite
   durum: DemandDurum
   kayipNedeni: string
+  adet: number // kaç adet soruldu
   createdAt: number
 }
 

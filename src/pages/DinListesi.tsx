@@ -6,7 +6,7 @@ import { talepListele, urunListele } from '../data/api'
 import { useVeri } from '../data/hooks'
 import { urunSirala } from '../lib/match'
 import type { Product } from '../types'
-import { BosDurum, SayfaBaslik } from '../components/Parcalar'
+import { BosDurum, SayfaBaslik, Yukleniyor } from '../components/Parcalar'
 
 interface DinGrubu {
   no: number
@@ -20,7 +20,8 @@ export default function DinListesi() {
   const [arama, setArama] = useState('')
   const [acikDin, setAcikDin] = useState<number | null>(null)
 
-  const urunler = useVeri(urunListele) ?? []
+  const urunlerHam = useVeri(urunListele)
+  const urunler = urunlerHam ?? []
   const talepler = useVeri(talepListele) ?? []
 
   const gruplar = useMemo<DinGrubu[]>(() => {
@@ -75,7 +76,9 @@ export default function DinListesi() {
         />
       </div>
 
-      {filtreli.length === 0 ? (
+      {urunlerHam === undefined ? (
+        <Yukleniyor />
+      ) : filtreli.length === 0 ? (
         <BosDurum mesaj="DIN kaydı bulunamadı" alt="Katalogdaki ürünlerin DIN alanı boş olabilir." />
       ) : (
         <div className="kart overflow-hidden">

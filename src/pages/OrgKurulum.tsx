@@ -1,9 +1,10 @@
 // Oturum açık ama şirket üyeliği yok (ör. kayıt yarıda kaldı):
 // davet koduyla şirket kur veya katılım koduyla katıl.
 import { useState } from 'react'
-import { Bolt, LogOut } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { hataMesaji, supabase } from '../data/client'
 import { useAuth } from '../auth/AuthContext'
+import Logo from '../components/Logo'
 
 export default function OrgKurulum() {
   const { session, uyelikYenile, cikisYap } = useAuth()
@@ -29,11 +30,8 @@ export default function OrgKurulum() {
   return (
     <div className="min-h-screen grid place-items-center px-4 py-8">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2.5 mb-5">
-          <span className="grid place-items-center w-10 h-10 rounded-lg bg-accent text-accent-ink">
-            <Bolt size={22} aria-hidden />
-          </span>
-          <div className="font-bold text-lg tracking-tight">Paslanmaz Takip</div>
+        <div className="text-center mb-5">
+          <Logo boyut="buyuk" />
         </div>
 
         <div className="kart p-5 md:p-6">

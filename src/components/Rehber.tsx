@@ -3,8 +3,9 @@ import { useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import type { RehberApi, RehberKaydi } from '../data/api'
 import { useVeri } from '../data/hooks'
+import { hataMesaji } from '../data/client'
 import Modal from './Modal'
-import { BosDurum, SayfaBaslik } from './Parcalar'
+import { BosDurum, SayfaBaslik, Yukleniyor } from './Parcalar'
 import { toast } from './Toast'
 import { trLower } from '../lib/searchWords'
 
@@ -23,8 +24,10 @@ export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props)
   const [duzenlenen, setDuzenlenen] = useState<RehberKaydi | null>(null)
   const [modalAcik, setModalAcik] = useState(false)
   const [form, setForm] = useState<RehberKaydi>({ ad: '', telefon: '', email: '' })
+  const [kaydediliyor, setKaydediliyor] = useState(false)
 
-  const kayitlar = useVeri(api.listele) ?? []
+  const kayitlarHam = useVeri(api.listele)
+  const kayitlar = kayitlarHam ?? []
   const filtreli = kayitlar.filter((k) => !arama.trim() || trLower(k.ad).includes(trLower(arama.trim())))
 
   function ac(kayit?: RehberKaydi) {
@@ -38,14 +41,22 @@ export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props)
       toast('Ad zorunludur.', 'hata')
       return
     }
-    if (duzenlenen?.id) {
-      await api.guncelle(duzenlenen.id, { ad: form.ad.trim(), telefon: form.telefon, email: form.email })
-      toast('Güncellendi.')
-    } else {
-      await api.ekle({ ad: form.ad.trim(), telefon: form.telefon, email: form.email })
-      toast('Eklendi.')
+    if (kaydediliyor) return
+    setKaydediliyor(true)
+    try {
+      if (duzenlenen?.id) {
+        await api.guncelle(duzenlenen.id, { ad: form.ad.trim(), telefon: form.telefon, email: form.email })
+        toast('Güncellendi.')
+      } else {
+        await api.ekle({ ad: form.ad.trim(), telefon: form.telefon, email: form.email })
+        toast('Eklendi.')
+      }
+      setModalAcik(false)
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    } finally {
+      setKaydediliyor(false)
     }
-    setModalAcik(false)
   }
 
   return (
@@ -67,7 +78,9 @@ export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props)
         onChange={(e) => setArama(e.target.value)}
       />
 
-      {filtreli.length === 0 ? (
+      {kayitlarHam === undefined ? (
+        <Yukleniyor />
+      ) : filtreli.length === 0 ? (
         <BosDurum mesaj={`Kayıtlı ${tekil} yok`} />
       ) : (
         <div className="kart overflow-x-auto">
@@ -101,8 +114,13 @@ export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props)
                     <button
                       className="text-ink-3 hover:text-bad p-1"
                       onClick={async () => {
-                        await api.sil(k.id!)
-                        toast('Silindi.')
+                        if (!window.confirm(`"${k.ad}" silinsin mi?`)) return
+                        try {
+                          await api.sil(k.id!)
+                          toast('Silindi.')
+                        } catch (e) {
+                          toast(hataMesaji(e), 'hata')
+                        }
                       }}
                       aria-label="Sil"
                     >
@@ -132,7 +150,9 @@ export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props)
           </div>
           <div className="flex justify-end gap-2 mt-1">
             <button className="btn btn-ikincil" onClick={() => setModalAcik(false)}>Vazgeç</button>
-            <button className="btn btn-birincil" onClick={kaydet}>Kaydet</button>
+            <button className="btn btn-birincil" onClick={kaydet} disabled={kaydediliyor}>
+              {kaydediliyor ? 'Kaydediliyor…' : 'Kaydet'}
+            </button>
           </div>
         </div>
       </Modal>

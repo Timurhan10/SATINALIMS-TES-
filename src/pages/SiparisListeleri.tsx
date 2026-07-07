@@ -6,18 +6,21 @@ import {
   kalemEkle, kalemGuncelle, kalemListele, kalemSil, listeEkle, listeListele, listeSil, tumKalemler,
 } from '../data/api'
 import { useVeri } from '../data/hooks'
+import { hataMesaji } from '../data/client'
 import type { OrderItem, OrderList, Product } from '../types'
 import { siparisXlsxIndir } from '../lib/excel'
 import ProductSearch from '../components/ProductSearch'
-import { BosDurum, SayfaBaslik } from '../components/Parcalar'
+import { AdetKutusu, BosDurum, SayfaBaslik, Yukleniyor } from '../components/Parcalar'
 import { toast } from '../components/Toast'
 
 export default function SiparisListeleri() {
   const [acikListe, setAcikListe] = useState<OrderList | null>(null)
   const [yeniAd, setYeniAd] = useState('')
   const [metin, setMetin] = useState('')
+  const [olusturuluyor, setOlusturuluyor] = useState(false)
 
-  const listeler = useVeri(listeListele) ?? []
+  const listelerHam = useVeri(listeListele)
+  const listeler = listelerHam ?? []
   const kalemler =
     useVeri(
       async (): Promise<OrderItem[]> => (acikListe?.id ? kalemListele(acikListe.id) : []),
@@ -33,27 +36,46 @@ export default function SiparisListeleri() {
 
   async function listeOlustur() {
     const ad = yeniAd.trim()
-    if (!ad) {
-      toast('Liste adı girin.', 'hata')
+    if (!ad || olusturuluyor) {
+      if (!ad) toast('Liste adı girin.', 'hata')
       return
     }
-    const yeni = await listeEkle(ad)
-    setYeniAd('')
-    setAcikListe(yeni)
-    toast('Liste oluşturuldu.')
+    setOlusturuluyor(true)
+    try {
+      const yeni = await listeEkle(ad)
+      setYeniAd('')
+      setAcikListe(yeni)
+      toast('Liste oluşturuldu.')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    } finally {
+      setOlusturuluyor(false)
+    }
   }
 
   async function urunEkle(u: Product) {
     if (!acikListe?.id) return
-    await kalemEkle({
-      listeId: acikListe.id,
-      productId: u.id ?? null,
-      aciklama: u.aciklama,
-      grup: u.grup,
-      standart: u.standart,
-      adet: 1,
-    })
-    toast('Listeye eklendi.')
+    try {
+      await kalemEkle({
+        listeId: acikListe.id,
+        productId: u.id ?? null,
+        aciklama: u.aciklama,
+        grup: u.grup,
+        standart: u.standart,
+        adet: 1,
+      })
+      toast('Listeye eklendi.')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
+  }
+
+  async function kalemDuzelt(id: number, adet: number) {
+    try {
+      await kalemGuncelle(id, { adet })
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
   }
 
   // ---- liste detayı ----
@@ -108,19 +130,18 @@ export default function SiparisListeleri() {
                     <td className="px-4 py-2">{k.grup || '—'}</td>
                     <td className="px-4 py-2 whitespace-nowrap">{k.standart || '—'}</td>
                     <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        min={1}
-                        className="girdi !py-1 w-20 tnum"
-                        value={k.adet}
-                        onChange={(e) => kalemGuncelle(k.id!, { adet: Math.max(1, Number(e.target.value) || 1) })}
-                        aria-label="Adet"
-                      />
+                      <AdetKutusu deger={k.adet} onKaydet={(n) => kalemDuzelt(k.id!, n)} />
                     </td>
                     <td className="px-2 py-2">
                       <button
                         className="text-ink-3 hover:text-bad p-1"
-                        onClick={() => kalemSil(k.id!)}
+                        onClick={async () => {
+                          try {
+                            await kalemSil(k.id!)
+                          } catch (e) {
+                            toast(hataMesaji(e), 'hata')
+                          }
+                        }}
                         aria-label="Kalemi sil"
                       >
                         <Trash2 size={15} />
@@ -149,12 +170,14 @@ export default function SiparisListeleri() {
           onChange={(e) => setYeniAd(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && listeOlustur()}
         />
-        <button className="btn btn-birincil" onClick={listeOlustur}>
-          <Plus size={16} aria-hidden /> Liste oluştur
+        <button className="btn btn-birincil" onClick={listeOlustur} disabled={olusturuluyor}>
+          <Plus size={16} aria-hidden /> {olusturuluyor ? 'Oluşturuluyor…' : 'Liste oluştur'}
         </button>
       </div>
 
-      {listeler.length === 0 ? (
+      {listelerHam === undefined ? (
+        <Yukleniyor />
+      ) : listeler.length === 0 ? (
         <BosDurum mesaj="Henüz sipariş listesi yok" alt="Yukarıdan ilk listenizi oluşturun." />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -169,8 +192,14 @@ export default function SiparisListeleri() {
                 <button
                   className="btn btn-tehlike btn-kucuk"
                   onClick={async () => {
-                    await listeSil(l.id!) // kalemler CASCADE ile birlikte silinir
-                    toast('Liste silindi.')
+                    const kalemAdedi = kalemSayilari.get(l.id!) ?? 0
+                    if (!window.confirm(`"${l.ad}" listesi${kalemAdedi ? ` ve içindeki ${kalemAdedi} kalem` : ''} silinsin mi?`)) return
+                    try {
+                      await listeSil(l.id!) // kalemler CASCADE ile birlikte silinir
+                      toast('Liste silindi.')
+                    } catch (e) {
+                      toast(hataMesaji(e), 'hata')
+                    }
                   }}
                 >
                   <Trash2 size={14} aria-hidden /> Sil

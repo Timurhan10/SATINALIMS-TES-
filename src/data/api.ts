@@ -61,6 +61,7 @@ function talepOku(r: Satir): Demand {
     kalite: r.kalite as Demand['kalite'],
     durum: r.durum as Demand['durum'],
     kayipNedeni: r.kayip_nedeni as string,
+    adet: Number(r.adet ?? 1),
     createdAt: Number(r.created_at),
   }
 }
@@ -78,6 +79,7 @@ function talepYaz(t: Partial<Demand>): Satir {
   if (t.kalite !== undefined) r.kalite = t.kalite
   if (t.durum !== undefined) r.durum = t.durum
   if (t.kayipNedeni !== undefined) r.kayip_nedeni = t.kayipNedeni
+  if (t.adet !== undefined) r.adet = t.adet
   if (t.createdAt !== undefined) r.created_at = t.createdAt
   return r
 }
@@ -134,19 +136,30 @@ export async function urunEkle(p: Product): Promise<Product> {
   return urunOku(data as Satir)
 }
 
-/** Toplu ürün ekleme (Excel import): 500'lük parçalar, aynı kart kodu atlanır. */
-export async function urunToptanEkle(liste: Product[]): Promise<void> {
+/** Toplu ürün ekleme (Excel import): 500'lük parçalar.
+ *  guncelle=false → aynı kart kodu atlanır; guncelle=true → üzerine yazılır. */
+export async function urunToptanEkle(liste: Product[], guncelle = false): Promise<void> {
   const BOY = 500
   for (let i = 0; i < liste.length; i += BOY) {
     const { error } = await supabase()
       .from('products')
       .upsert(liste.slice(i, i + BOY).map(urunYaz), {
         onConflict: 'org_id,kart_kodu',
-        ignoreDuplicates: true,
+        ignoreDuplicates: !guncelle,
       })
     hataFirlat(error)
   }
   degisti()
+}
+
+/** Verilen id listesindeki ürünleri siler (Excel "değiştir" modunda artıkları temizler). */
+export async function urunIdleriyleSil(idler: number[]): Promise<void> {
+  const BOY = 500
+  for (let i = 0; i < idler.length; i += BOY) {
+    const { error } = await supabase().from('products').delete().in('id', idler.slice(i, i + BOY))
+    hataFirlat(error)
+  }
+  if (idler.length > 0) degisti()
 }
 
 export async function urunGuncelle(id: number, patch: Partial<Product>): Promise<void> {

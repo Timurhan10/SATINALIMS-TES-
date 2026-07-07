@@ -1,9 +1,9 @@
 // Giriş / kayıt ekranı: mevcut hesapla giriş, davet koduyla yeni şirket kurma
 // veya katılım koduyla mevcut şirkete üye olma.
 import { useState } from 'react'
-import { Bolt } from 'lucide-react'
 import { hataMesaji, supabase } from '../data/client'
 import { useAuth } from '../auth/AuthContext'
+import Logo from '../components/Logo'
 
 type Sekme = 'giris' | 'kur' | 'katil'
 
@@ -89,14 +89,8 @@ export default function Giris() {
   return (
     <div className="min-h-screen grid place-items-center px-4 py-8">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2.5 mb-5">
-          <span className="grid place-items-center w-10 h-10 rounded-lg bg-accent text-accent-ink">
-            <Bolt size={22} aria-hidden />
-          </span>
-          <div className="leading-tight">
-            <div className="font-bold text-lg tracking-tight">Paslanmaz Takip</div>
-            <div className="text-xs text-ink-3">Talep &amp; Satınalma</div>
-          </div>
+        <div className="text-center mb-6">
+          <Logo boyut="buyuk" slogan />
         </div>
 
         <div className="kart p-5 md:p-6">

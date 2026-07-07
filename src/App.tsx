@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import {
-  BarChart3, Bolt, ClipboardList, Contact, KeyRound, LayoutDashboard, ListOrdered,
+  BarChart3, ClipboardList, Contact, KeyRound, LayoutDashboard, ListOrdered,
   LogOut, Moon, Package, Settings, Sun, Truck,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -18,6 +18,7 @@ import OrgKurulum from './pages/OrgKurulum'
 import KurulumBekleniyor from './pages/KurulumBekleniyor'
 import Admin from './pages/Admin'
 import { ToastAlani } from './components/Toast'
+import Logo from './components/Logo'
 import { useAuth } from './auth/AuthContext'
 import { hasConfig } from './data/client'
 import { ADMIN_EPOSTA } from './supabaseConfig'
@@ -79,13 +80,23 @@ export default function App() {
     <div className="min-h-screen md:flex">
       {/* Sol menü */}
       <aside className="md:w-60 md:min-h-screen md:flex md:flex-col shrink-0 bg-surface border-b md:border-b-0 md:border-r border-line">
-        <div className="flex items-center gap-2.5 px-5 py-4">
-          <span className="grid place-items-center w-9 h-9 rounded-lg bg-accent text-accent-ink">
-            <Bolt size={20} aria-hidden />
-          </span>
+        <div className="flex items-center justify-between gap-2 px-5 py-4">
           <div className="leading-tight">
-            <div className="font-bold tracking-tight">Paslanmaz Takip</div>
-            <div className="text-xs text-ink-3 truncate max-w-36" title={uyelik.orgAd}>{uyelik.orgAd}</div>
+            <Logo />
+            <div className="text-xs text-ink-3 truncate max-w-44 mt-0.5" title={uyelik.orgAd}>{uyelik.orgAd}</div>
+          </div>
+          {/* Mobil: tema + çıkış (masaüstünde alttaki blok görünür) */}
+          <div className="flex gap-1.5 md:hidden">
+            <button
+              className="btn btn-ikincil btn-kucuk"
+              onClick={() => setTema(tema === 'dark' ? 'light' : 'dark')}
+              aria-label="Tema değiştir"
+            >
+              {tema === 'dark' ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
+            </button>
+            <button className="btn btn-ikincil btn-kucuk" onClick={cikisYap} aria-label="Çıkış yap">
+              <LogOut size={15} aria-hidden />
+            </button>
           </div>
         </div>
         <nav className="flex md:block overflow-x-auto px-3 pb-3 md:pb-4 gap-1">

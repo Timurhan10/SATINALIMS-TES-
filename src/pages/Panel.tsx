@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { FileSpreadsheet } from 'lucide-react'
 import { musteriListele, talepListele, urunListele } from '../data/api'
 import { useVeri } from '../data/hooks'
-import { BosDurum, KpiKarti, SayfaBaslik } from '../components/Parcalar'
+import { BosDurum, KpiKarti, SayfaBaslik, Yukleniyor } from '../components/Parcalar'
 import { DURUM_ETIKET } from '../types'
 import type { DemandDurum } from '../types'
 
@@ -13,10 +14,13 @@ const DURUM_RENK: Record<DemandDurum, string> = {
 }
 
 export default function Panel() {
-  const talepler = useVeri(talepListele) ?? []
-  const urunler = useVeri(urunListele) ?? []
+  const taleplerHam = useVeri(talepListele)
+  const urunlerHam = useVeri(urunListele)
+  const talepler = taleplerHam ?? []
+  const urunler = urunlerHam ?? []
   const musteriler = useVeri(musteriListele) ?? []
   const urunSayisi = urunler.length
+  const yukleniyor = taleplerHam === undefined || urunlerHam === undefined
 
   const urunMap = useMemo(() => new Map(urunler.map((u) => [u.id, u])), [urunler])
   const musteriMap = useMemo(() => new Map(musteriler.map((m) => [m.id, m.ad])), [musteriler])
@@ -29,18 +33,19 @@ export default function Panel() {
 
   // Stoğa eklenmeli: en çok VERILMEDI olan ürün/imza
   const stogaEklenmeli = useMemo(() => {
-    const sayim = new Map<string, { etiket: string; adet: number; neden: string }>()
+    const sayim = new Map<string, { etiket: string; kez: number; toplamAdet: number; neden: string }>()
     for (const t of talepler) {
       if (t.durum !== 'VERILMEDI') continue
       const u = t.productId ? urunMap.get(t.productId) : undefined
       const anahtar = u ? `u${u.id}` : `s:${t.serbestMetin}`
       const etiket = u?.aciklama ?? t.serbestMetin
-      const kayit = sayim.get(anahtar) ?? { etiket, adet: 0, neden: t.kayipNedeni }
-      kayit.adet++
+      const kayit = sayim.get(anahtar) ?? { etiket, kez: 0, toplamAdet: 0, neden: t.kayipNedeni }
+      kayit.kez++
+      kayit.toplamAdet += t.adet
       if (t.kayipNedeni) kayit.neden = t.kayipNedeni
       sayim.set(anahtar, kayit)
     }
-    return [...sayim.values()].sort((a, b) => b.adet - a.adet).slice(0, 8)
+    return [...sayim.values()].sort((a, b) => b.kez - a.kez).slice(0, 8)
   }, [talepler, urunMap])
 
   const sonTalepler = useMemo(
@@ -53,9 +58,33 @@ export default function Panel() {
     adet: talepler.filter((t) => t.durum === d).length,
   }))
 
+  if (yukleniyor) {
+    return (
+      <div>
+        <SayfaBaslik baslik="Panel" aciklama="Talep verinizin genel görünümü." />
+        <Yukleniyor />
+      </div>
+    )
+  }
+
   return (
     <div>
       <SayfaBaslik baslik="Panel" aciklama="Talep verinizin genel görünümü." />
+
+      {/* Yeni (boş) şirket için başlangıç rehberi */}
+      {urunSayisi === 0 && toplam === 0 && (
+        <div className="kart p-4 md:p-5 mb-5 border-l-4 !border-l-[var(--accent)]">
+          <div className="font-semibold mb-1.5">Hoş geldiniz! Başlamak için 3 adım:</div>
+          <ol className="text-sm text-ink-2 list-decimal ml-5 grid gap-1 mb-3">
+            <li><strong>Katalog</strong> sayfasından ürün Excel'inizi içe aktarın (Kart Kodu | Açıklama | Grup | DIN).</li>
+            <li><strong>Talepler</strong> sayfasından müşteri taleplerini girin — verilemeyenler de kaydedilir.</li>
+            <li><strong>Raporlar</strong>'da hangi ürünün kaç kez ve kaç adet sorulduğunu izleyin.</li>
+          </ol>
+          <Link to="/katalog" className="btn btn-birincil inline-flex">
+            <FileSpreadsheet size={16} aria-hidden /> Kataloğu yükle
+          </Link>
+        </div>
+      )}
 
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-5">
         <KpiKarti etiket="Toplam talep" deger={String(toplam)} />
@@ -112,8 +141,9 @@ export default function Panel() {
                     </td>
                     <td className="px-4 py-2 text-right whitespace-nowrap">
                       <span className="bg-bad-soft text-bad rounded-full px-2.5 py-0.5 text-xs font-bold tnum">
-                        {s.adet}×
+                        {s.kez}×
                       </span>
+                      <div className="text-xs text-ink-3 tnum mt-0.5">{s.toplamAdet.toLocaleString('tr-TR')} adet</div>
                     </td>
                   </tr>
                 ))}

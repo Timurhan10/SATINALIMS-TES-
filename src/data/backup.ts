@@ -78,6 +78,7 @@ export async function yedekYukle(json: string): Promise<void> {
   const talepler = (veri.demands ?? []).map((t) => ({
     ...t,
     id: undefined,
+    adet: t.adet ?? 1, // eski yedeklerde adet alanı yok
     customerId: musteriEsleme.get(t.customerId) ?? t.customerId,
     productId: t.productId !== null ? urunEsleme.get(t.productId) ?? null : null,
   }))

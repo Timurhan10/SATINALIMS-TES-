@@ -22,6 +22,9 @@
   --bad-soft: #fae6e6;
   --info: #2a63c0;
   --info-soft: #e5edfa;
+  /* Tid Business marka renkleri: lacivert temaya göre değişir, turkuaz sabit */
+  --logo-ink: #1e2a5e;
+  --logo-teal: #149aa8;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -45,6 +48,7 @@
     --bad-soft: #391616;
     --info: #7aa5e8;
     --info-soft: #14243d;
+    --logo-ink: #dfe6f5;
   }
 }
 
@@ -68,6 +72,7 @@
   --bad-soft: #fae6e6;
   --info: #2a63c0;
   --info-soft: #e5edfa;
+  --logo-ink: #1e2a5e;
 }
 
 :root[data-theme="dark"] {
@@ -90,6 +95,7 @@
   --bad-soft: #391616;
   --info: #7aa5e8;
   --info-soft: #14243d;
+  --logo-ink: #dfe6f5;
 }
 
 @theme inline {

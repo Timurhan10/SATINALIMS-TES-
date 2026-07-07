@@ -1,14 +1,15 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileSpreadsheet, Pencil, Plus, Search, Trash2 } from 'lucide-react'
-import { urunGuncelle, urunKaynaktanSil, urunListele, urunSil, urunToptanEkle } from '../data/api'
+import { urunGuncelle, urunIdleriyleSil, urunListele, urunSil, urunToptanEkle } from '../data/api'
 import { useVeri } from '../data/hooks'
+import { hataMesaji } from '../data/client'
 import type { Kalite, Product } from '../types'
 import { parseSerbestMetin, trUpper } from '../lib/parser'
 import { urunEslestir, urunSirala } from '../lib/match'
 import { katalogExcelOku } from '../lib/excel'
 import Modal from '../components/Modal'
 import { KALITELER } from '../components/ProductSearch'
-import { BosDurum, SayfaBaslik } from '../components/Parcalar'
+import { BosDurum, SayfaBaslik, Yukleniyor } from '../components/Parcalar'
 import { toast } from '../components/Toast'
 import { ElleUrunModal } from './Talepler'
 
@@ -26,7 +27,15 @@ export default function Katalog() {
   const [surukleniyor, setSurukleniyor] = useState(false)
   const dosyaInput = useRef<HTMLInputElement>(null)
 
-  const urunler = useVeri(urunListele) ?? []
+  const urunlerHam = useVeri(urunListele)
+  const urunler = urunlerHam ?? []
+
+  // Arama her tuşta değil, yazma durunca (250 ms) çalışsın — büyük katalogda takılmayı önler.
+  const [aramaGecikmeli, setAramaGecikmeli] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setAramaGecikmeli(arama), 250)
+    return () => clearTimeout(t)
+  }, [arama])
 
   const gruplar = useMemo(
     () => [...new Set(urunler.map((u) => u.grup).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
@@ -34,12 +43,12 @@ export default function Katalog() {
   )
 
   const sonuclar = useMemo(() => {
-    if (!arama.trim() && !grup && !kalite) {
+    if (!aramaGecikmeli.trim() && !grup && !kalite) {
       return [...urunler].sort(urunSirala)
     }
-    const imza = parseSerbestMetin(arama)
-    return urunEslestir(urunler, imza, arama, grup, kalite, 100000).urunler
-  }, [urunler, arama, grup, kalite])
+    const imza = parseSerbestMetin(aramaGecikmeli)
+    return urunEslestir(urunler, imza, aramaGecikmeli, grup, kalite, 100000).urunler
+  }, [urunler, aramaGecikmeli, grup, kalite])
 
   async function excelYukle(dosya: File, mod: 'degistir' | 'birlestir') {
     setImportCalisiyor(true)
@@ -49,10 +58,19 @@ export default function Katalog() {
         toast('Dosyada geçerli ürün satırı bulunamadı.', 'hata')
         return
       }
-      // Aynı kart kodu sunucuda otomatik atlanır (org içi benzersizlik);
-      // "değiştir" modunda önce Excel kaynaklı eski ürünler silinir.
-      if (mod === 'degistir') await urunKaynaktanSil('katalog')
-      await urunToptanEkle(yeni)
+      if (mod === 'degistir') {
+        // Önce yükle/güncelle, başarılıysa yeni dosyada olmayan eski Excel ürünlerini sil:
+        // işlem ortada kesilirse katalog kaybolmaz. Elle/AI eklenen ürünler korunur.
+        await urunToptanEkle(yeni, true)
+        const yeniKodlar = new Set(yeni.map((u) => u.kartKodu))
+        const artiklar = urunler
+          .filter((u) => u.kaynak === 'katalog' && !yeniKodlar.has(u.kartKodu))
+          .map((u) => u.id!)
+        await urunIdleriyleSil(artiklar)
+      } else {
+        // Birleştir: yalnız yeni kart kodları eklenir, mevcutlara dokunulmaz.
+        await urunToptanEkle(yeni)
+      }
       toast(`${yeni.length} ürün içe aktarıldı${atlanan ? ` (${atlanan} satır atlandı)` : ''}.`)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Excel okunamadı.', 'hata')
@@ -133,7 +151,9 @@ export default function Katalog() {
         </select>
       </div>
 
-      {sonuclar.length === 0 ? (
+      {urunlerHam === undefined ? (
+        <Yukleniyor />
+      ) : sonuclar.length === 0 ? (
         <BosDurum
           mesaj="Ürün bulunamadı"
           alt="Excel dosyanızı sürükleyip bırakarak kataloğu yükleyebilirsiniz (Kart Kodu | Açıklama | Grup Kodu | Özel Kod 1)."
@@ -169,8 +189,13 @@ export default function Katalog() {
                       <button
                         className="text-ink-3 hover:text-bad p-1"
                         onClick={async () => {
-                          await urunSil(u.id!)
-                          toast('Ürün silindi.')
+                          if (!window.confirm(`"${u.aciklama}" silinsin mi?`)) return
+                          try {
+                            await urunSil(u.id!)
+                            toast('Ürün silindi.')
+                          } catch (e) {
+                            toast(hataMesaji(e), 'hata')
+                          }
                         }}
                         aria-label="Sil"
                       >
@@ -239,23 +264,27 @@ function DuzeltModal({ urun, kapat }: { urun: Product | null; kapat: () => void 
     const boyHam = form.boyMm !== undefined ? form.boyMm : u.boyMm
     const olcu = typeof olcuHam === 'string' ? (olcuHam === '' ? null : parseFloat(String(olcuHam).replace(',', '.'))) : olcuHam
     const boyMm = typeof boyHam === 'string' ? (boyHam === '' ? null : parseFloat(String(boyHam).replace(',', '.'))) : boyHam
-    await urunGuncelle(u.id, {
-      aciklama: trUpper(String(form.aciklama ?? u.aciklama)),
-      grup: trUpper(String(form.grup ?? u.grup)),
-      standart: String(form.standart ?? u.standart),
-      olcu: Number.isFinite(olcu as number) ? (olcu as number) : null,
-      boyMm: Number.isFinite(boyMm as number) ? (boyMm as number) : null,
-      kalite: (form.kalite ?? u.kalite) as Kalite,
-      boyutMetni:
-        olcu != null && Number.isFinite(olcu as number)
-          ? boyMm != null && Number.isFinite(boyMm as number)
-            ? `M${olcu}x${boyMm}`
-            : `M${olcu}`
-          : '',
-    })
-    toast('Ürün güncellendi.')
-    setForm({})
-    kapat()
+    try {
+      await urunGuncelle(u.id, {
+        aciklama: trUpper(String(form.aciklama ?? u.aciklama)),
+        grup: trUpper(String(form.grup ?? u.grup)),
+        standart: String(form.standart ?? u.standart),
+        olcu: Number.isFinite(olcu as number) ? (olcu as number) : null,
+        boyMm: Number.isFinite(boyMm as number) ? (boyMm as number) : null,
+        kalite: (form.kalite ?? u.kalite) as Kalite,
+        boyutMetni:
+          olcu != null && Number.isFinite(olcu as number)
+            ? boyMm != null && Number.isFinite(boyMm as number)
+              ? `M${olcu}x${boyMm}`
+              : `M${olcu}`
+            : '',
+      })
+      toast('Ürün güncellendi.')
+      setForm({})
+      kapat()
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
   }
 
   return (

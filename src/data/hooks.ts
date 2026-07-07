@@ -1,11 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { degisti, getSnapshot, subscribe } from './store'
+import { getSnapshot, subscribe } from './store'
 import { toast } from '../components/Toast'
 
 /**
  * Buluttan veri okuyan reaktif hook — useLiveQuery'nin karşılığı.
- * Her mutasyondan (degisti) ve pencere odağa geldiğinde yeniden çeker;
- * böylece mesai arkadaşının değişiklikleri de görünür.
+ * Her mutasyonda (degisti) ve pencere odağa gelince (store'daki global dinleyici)
+ * yeniden çeker. İlk yükleme bitene dek `undefined` döner (= yükleniyor);
+ * sonraki yenilemelerde eski veri korunur, ekran titremez.
  */
 export function useVeri<T>(fetcher: () => Promise<T>, deps: unknown[] = []): T | undefined {
   const surum = useSyncExternalStore(subscribe, getSnapshot)
@@ -22,12 +23,6 @@ export function useVeri<T>(fetcher: () => Promise<T>, deps: unknown[] = []): T |
     return () => { aktif = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surum, ...deps])
-
-  useEffect(() => {
-    const f = () => degisti()
-    window.addEventListener('focus', f)
-    return () => window.removeEventListener('focus', f)
-  }, [])
 
   return veri
 }

@@ -5,19 +5,22 @@ import {
   urunEkle, urunListele,
 } from '../data/api'
 import { useVeri } from '../data/hooks'
+import { hataMesaji } from '../data/client'
 import type { Demand, DemandDurum, Kalite, Product } from '../types'
 import { DURUM_ETIKET, KAYIP_NEDENLERI } from '../types'
 import { parseSerbestMetin, trUpper } from '../lib/parser'
 import { trLower } from '../lib/searchWords'
+import { bugunYerel } from '../lib/tarih'
 import { aiAnahtarVarMi, urunCozumle } from '../lib/ai'
 import ProductSearch from '../components/ProductSearch'
 import CustomerCombobox from '../components/CustomerCombobox'
 import Modal from '../components/Modal'
-import { BosDurum, DurumRozeti, SayfaBaslik } from '../components/Parcalar'
+import { AdetKutusu, BosDurum, DurumRozeti, SayfaBaslik, Yukleniyor } from '../components/Parcalar'
 import { toast } from '../components/Toast'
 
-function bugun(): string {
-  return new Date().toISOString().slice(0, 10)
+interface SecimSatiri {
+  urun: Product
+  adet: number
 }
 
 /** Müşteri adından id bulur; yoksa oluşturur. */
@@ -32,13 +35,15 @@ export default function Talepler() {
   // ---- yeni talep formu ----
   const [firma, setFirma] = useState('')
   const [firmaHata, setFirmaHata] = useState(false)
-  const [tarih, setTarih] = useState(bugun())
+  const [tarih, setTarih] = useState(bugunYerel())
   const [metin, setMetin] = useState('')
-  const [secililer, setSecililer] = useState<Map<number, Product>>(new Map())
+  const [secililer, setSecililer] = useState<Map<number, SecimSatiri>>(new Map())
+  const [genelAdet, setGenelAdet] = useState('1') // katalogsuz talep için
   const [durum, setDurum] = useState<DemandDurum>('BEKLEMEDE')
   const [kayipNedeni, setKayipNedeni] = useState<string>(KAYIP_NEDENLERI[0])
   const [elleAcik, setElleAcik] = useState(false)
   const [aiCalisiyor, setAiCalisiyor] = useState(false)
+  const [kaydediliyor, setKaydediliyor] = useState(false)
 
   const aiVar = aiAnahtarVarMi()
 
@@ -46,7 +51,8 @@ export default function Talepler() {
   const [listeArama, setListeArama] = useState('')
   const [listeDurum, setListeDurum] = useState<DemandDurum | ''>('')
 
-  const talepler = useVeri(talepListele) ?? []
+  const taleplerHam = useVeri(talepListele)
+  const talepler = taleplerHam ?? []
   const musteriler = useVeri(musteriListele) ?? []
   const urunler = useVeri(urunListele) ?? []
 
@@ -69,42 +75,66 @@ export default function Talepler() {
     setSecililer((eski) => {
       const yeni = new Map(eski)
       if (yeni.has(u.id!)) yeni.delete(u.id!)
-      else yeni.set(u.id!, u)
+      else yeni.set(u.id!, { urun: u, adet: 1 })
       return yeni
     })
   }
 
-  async function kaydet(urunListesi: Product[], katalogsuz = false) {
+  function adetDegistir(id: number, adet: number) {
+    setSecililer((eski) => {
+      const yeni = new Map(eski)
+      const s = yeni.get(id)
+      if (s) yeni.set(id, { ...s, adet: Math.max(1, adet) })
+      return yeni
+    })
+  }
+
+  async function kaydet(katalogsuz = false) {
+    if (kaydediliyor) return
     if (!firma.trim()) {
       setFirmaHata(true)
       toast('Firma/müşteri adı zorunludur.', 'hata')
       return
     }
-    if (urunListesi.length === 0 && !katalogsuz) {
+    const satirlar = [...secililer.values()]
+    if (satirlar.length === 0 && !katalogsuz) {
       toast('En az bir ürün seçin veya katalogsuz talep kaydedin.', 'hata')
       return
     }
-    const customerId = await musteriIdBul(firma)
-    const imza = parseSerbestMetin(metin)
-    const kayitlar: Demand[] = (katalogsuz ? [null] : urunListesi).map((u) => ({
-      tarih,
-      customerId,
-      productId: u?.id ?? null,
-      serbestMetin: metin.trim() || (u?.aciklama ?? ''),
-      grup: u?.grup ?? imza.grup,
-      standart: u?.standart ?? imza.standart,
-      olcu: u?.olcu ?? imza.olcu,
-      boyMm: u?.boyMm ?? imza.boyMm,
-      kalite: (u?.kalite ?? imza.kalite) as Kalite,
-      durum,
-      kayipNedeni: durum === 'VERILMEDI' ? kayipNedeni : '',
-      createdAt: Date.now(),
-    }))
-    await talepToptanEkle(kayitlar)
-    toast(`${kayitlar.length} talep kaydedildi.`)
-    setSecililer(new Map())
-    setMetin('')
-    setFirmaHata(false)
+    setKaydediliyor(true)
+    try {
+      const customerId = await musteriIdBul(firma)
+      const imza = parseSerbestMetin(metin)
+      const kaynaklar: Array<{ urun: Product | null; adet: number }> = katalogsuz
+        ? [{ urun: null, adet: Math.max(1, parseInt(genelAdet, 10) || 1) }]
+        : satirlar.map((s) => ({ urun: s.urun, adet: s.adet }))
+      const kayitlar: Demand[] = kaynaklar.map(({ urun: u, adet }) => ({
+        tarih,
+        customerId,
+        productId: u?.id ?? null,
+        serbestMetin: metin.trim() || (u?.aciklama ?? ''),
+        grup: u?.grup ?? imza.grup,
+        standart: u?.standart ?? imza.standart,
+        olcu: u?.olcu ?? imza.olcu,
+        boyMm: u?.boyMm ?? imza.boyMm,
+        kalite: (u?.kalite ?? imza.kalite) as Kalite,
+        durum,
+        kayipNedeni: durum === 'VERILMEDI' ? kayipNedeni : '',
+        adet,
+        createdAt: Date.now(),
+      }))
+      await talepToptanEkle(kayitlar)
+      toast(`${kayitlar.length} talep kaydedildi.`)
+      setSecililer(new Map())
+      setMetin('')
+      setFirma('')
+      setGenelAdet('1')
+      setFirmaHata(false)
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    } finally {
+      setKaydediliyor(false)
+    }
   }
 
   async function aiIleDoldur() {
@@ -127,21 +157,33 @@ export default function Talepler() {
         kaynak: 'ai',
         inCatalog: false,
       })
-      setSecililer((eski) => new Map(eski).set(yeni.id!, yeni))
+      setSecililer((eski) => new Map(eski).set(yeni.id!, { urun: yeni, adet: 1 }))
       toast(`AI ürünü oluşturdu: ${yeni.aciklama}`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'AI çözümleme başarısız.', 'hata')
+      toast(hataMesaji(e), 'hata')
     } finally {
       setAiCalisiyor(false)
     }
   }
 
   async function durumGuncelle(t: Demand, yeniDurum: DemandDurum) {
-    await talepGuncelle(t.id!, {
-      durum: yeniDurum,
-      kayipNedeni: yeniDurum === 'VERILMEDI' ? t.kayipNedeni || KAYIP_NEDENLERI[0] : '',
-    })
-    toast('Durum güncellendi.')
+    try {
+      await talepGuncelle(t.id!, {
+        durum: yeniDurum,
+        kayipNedeni: yeniDurum === 'VERILMEDI' ? t.kayipNedeni || KAYIP_NEDENLERI[0] : '',
+      })
+      toast('Durum güncellendi.')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
+  }
+
+  async function talepDuzelt(id: number, patch: Partial<Demand>) {
+    try {
+      await talepGuncelle(id, patch)
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
   }
 
   return (
@@ -185,7 +227,7 @@ export default function Talepler() {
                 <button className="btn btn-ikincil btn-kucuk" onClick={() => setElleAcik(true)}>
                   <Plus size={14} aria-hidden /> Elle yeni ürün
                 </button>
-                <button className="btn btn-ikincil btn-kucuk" onClick={() => kaydet([], true)}>
+                <button className="btn btn-ikincil btn-kucuk" onClick={() => kaydet(true)} disabled={kaydediliyor}>
                   Katalogsuz talep kaydet
                 </button>
               </div>
@@ -194,16 +236,28 @@ export default function Talepler() {
         </div>
 
         {secililer.size > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {[...secililer.values()].map((u) => (
-              <button
-                key={u.id}
-                className="bg-accent-soft text-accent rounded-full px-3 py-1 text-xs font-medium hover:opacity-80"
-                onClick={() => toggleUrun(u)}
-                title="Kaldırmak için tıklayın"
-              >
-                {u.aciklama} ✕
-              </button>
+          <div className="mt-3 grid gap-1.5">
+            <div className="mikro">Seçilen ürünler ve adetleri</div>
+            {[...secililer.values()].map(({ urun: u, adet }) => (
+              <div key={u.id} className="flex items-center gap-2 bg-accent-soft rounded-lg px-3 py-1.5">
+                <span className="flex-1 text-sm font-medium text-accent truncate">{u.aciklama}</span>
+                <label className="text-xs text-ink-3" htmlFor={`adet-${u.id}`}>Adet</label>
+                <input
+                  id={`adet-${u.id}`}
+                  type="number"
+                  min={1}
+                  className="girdi !py-1 w-20 tnum text-sm"
+                  value={adet}
+                  onChange={(e) => adetDegistir(u.id!, parseInt(e.target.value, 10) || 1)}
+                />
+                <button
+                  className="text-ink-3 hover:text-bad p-1"
+                  onClick={() => toggleUrun(u)}
+                  aria-label={`${u.aciklama} kaldır`}
+                >
+                  ✕
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -217,6 +271,19 @@ export default function Talepler() {
               ))}
             </select>
           </div>
+          {secililer.size === 0 && (
+            <div>
+              <label className="text-xs font-medium text-ink-2 block mb-1">Adet (katalogsuz)</label>
+              <input
+                type="number"
+                min={1}
+                className="girdi w-24 tnum"
+                value={genelAdet}
+                onChange={(e) => setGenelAdet(e.target.value)}
+                aria-label="Katalogsuz talep adedi"
+              />
+            </div>
+          )}
           {durum === 'VERILMEDI' && (
             <div>
               <label className="text-xs font-medium text-ink-2 block mb-1">Kayıp nedeni</label>
@@ -227,9 +294,9 @@ export default function Talepler() {
               </select>
             </div>
           )}
-          <button className="btn btn-birincil" onClick={() => kaydet([...secililer.values()])}>
+          <button className="btn btn-birincil" onClick={() => kaydet()} disabled={kaydediliyor}>
             <Plus size={16} aria-hidden />
-            {secililer.size > 1 ? `${secililer.size} talep kaydet` : 'Talebi kaydet'}
+            {kaydediliyor ? 'Kaydediliyor…' : secililer.size > 1 ? `${secililer.size} talep kaydet` : 'Talebi kaydet'}
           </button>
         </div>
       </div>
@@ -250,7 +317,9 @@ export default function Talepler() {
         </select>
       </div>
 
-      {goruntulenen.length === 0 ? (
+      {taleplerHam === undefined ? (
+        <Yukleniyor />
+      ) : goruntulenen.length === 0 ? (
         <BosDurum mesaj="Kayıtlı talep yok" alt="Yukarıdaki formdan ilk talebi ekleyin." />
       ) : (
         <div className="kart overflow-x-auto">
@@ -260,6 +329,7 @@ export default function Talepler() {
                 <th className="px-4 py-2.5 font-semibold">Tarih</th>
                 <th className="px-4 py-2.5 font-semibold">Firma</th>
                 <th className="px-4 py-2.5 font-semibold">Ürün / Talep</th>
+                <th className="px-4 py-2.5 font-semibold">Adet</th>
                 <th className="px-4 py-2.5 font-semibold">Durum</th>
                 <th className="px-4 py-2.5 font-semibold">Kayıp nedeni</th>
                 <th className="px-2 py-2.5" aria-label="İşlemler"></th>
@@ -278,6 +348,9 @@ export default function Talepler() {
                         <div className="text-xs text-ink-3">“{t.serbestMetin}”</div>
                       )}
                       {!u && <div className="text-xs text-warn">katalog dışı</div>}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <AdetKutusu deger={t.adet} onKaydet={(n) => talepDuzelt(t.id!, { adet: n })} />
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
@@ -299,7 +372,7 @@ export default function Talepler() {
                         <select
                           className="girdi w-auto !py-1 !px-2 text-xs"
                           value={t.kayipNedeni || KAYIP_NEDENLERI[0]}
-                          onChange={(e) => talepGuncelle(t.id!, { kayipNedeni: e.target.value })}
+                          onChange={(e) => talepDuzelt(t.id!, { kayipNedeni: e.target.value })}
                           aria-label="Kayıp nedeni"
                         >
                           {KAYIP_NEDENLERI.map((n) => (
@@ -314,8 +387,13 @@ export default function Talepler() {
                       <button
                         className="text-ink-3 hover:text-bad p-1"
                         onClick={async () => {
-                          await talepSil(t.id!)
-                          toast('Talep silindi.')
+                          if (!window.confirm('Bu talep silinsin mi?')) return
+                          try {
+                            await talepSil(t.id!)
+                            toast('Talep silindi.')
+                          } catch (e) {
+                            toast(hataMesaji(e), 'hata')
+                          }
                         }}
                         aria-label="Talebi sil"
                       >
@@ -331,7 +409,7 @@ export default function Talepler() {
       )}
 
       <ElleUrunModal acik={elleAcik} kapat={() => setElleAcik(false)} onOlustu={(u) => {
-        if (u.id !== undefined) setSecililer((eski) => new Map(eski).set(u.id!, u))
+        if (u.id !== undefined) setSecililer((eski) => new Map(eski).set(u.id!, { urun: u, adet: 1 }))
       }} varsayilanMetin={metin} />
     </div>
   )
@@ -360,30 +438,34 @@ export function ElleUrunModal({
     }
     const olcuN = olcu ? parseFloat(olcu.replace(',', '.')) : null
     const boyN = boy ? parseFloat(boy.replace(',', '.')) : null
-    const u = await urunEkle({
-      kartKodu: `MAN-${Date.now()}`,
-      aciklama: trUpper(aciklama.trim()),
-      grup: trUpper(grup.trim()),
-      standart: din.trim() ? `DIN ${din.trim().replace(/^din\s*/i, '')}` : '',
-      standartAdi: '',
-      basTipi: '',
-      olcu: Number.isFinite(olcuN) ? olcuN : null,
-      boyMm: Number.isFinite(boyN) ? boyN : null,
-      boyutMetni: olcuN ? (boyN ? `M${olcu}x${boy}` : `M${olcu}`) : '',
-      kalite,
-      disTipi: olcuN ? 'metrik' : '',
-      kaynak: 'manuel',
-      inCatalog: false,
-    })
-    toast('Ürün eklendi.')
-    if (onOlustu) onOlustu(u)
-    kapat()
-    setAciklama('')
-    setGrup('')
-    setDin('')
-    setOlcu('')
-    setBoy('')
-    setKalite('')
+    try {
+      const u = await urunEkle({
+        kartKodu: `MAN-${Date.now()}`,
+        aciklama: trUpper(aciklama.trim()),
+        grup: trUpper(grup.trim()),
+        standart: din.trim() ? `DIN ${din.trim().replace(/^din\s*/i, '')}` : '',
+        standartAdi: '',
+        basTipi: '',
+        olcu: Number.isFinite(olcuN) ? olcuN : null,
+        boyMm: Number.isFinite(boyN) ? boyN : null,
+        boyutMetni: olcuN ? (boyN ? `M${olcu}x${boy}` : `M${olcu}`) : '',
+        kalite,
+        disTipi: olcuN ? 'metrik' : '',
+        kaynak: 'manuel',
+        inCatalog: false,
+      })
+      toast('Ürün eklendi.')
+      if (onOlustu) onOlustu(u)
+      kapat()
+      setAciklama('')
+      setGrup('')
+      setDin('')
+      setOlcu('')
+      setBoy('')
+      setKalite('')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
   }
 
   return (

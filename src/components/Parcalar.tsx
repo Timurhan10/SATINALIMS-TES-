@@ -1,6 +1,7 @@
-// Küçük ortak parçalar: sayfa başlığı, KPI kartı, durum rozeti, boş durum.
+// Küçük ortak parçalar: sayfa başlığı, KPI kartı, durum rozeti, boş/yükleniyor durum, adet kutusu.
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Inbox } from 'lucide-react'
+import { Inbox, Loader2 } from 'lucide-react'
 import type { DemandDurum } from '../types'
 import { DURUM_ETIKET } from '../types'
 
@@ -49,5 +50,40 @@ export function BosDurum({ mesaj, alt }: { mesaj: string; alt?: string }) {
       <div className="font-medium text-ink-2">{mesaj}</div>
       {alt && <div className="text-sm text-ink-3 mt-1">{alt}</div>}
     </div>
+  )
+}
+
+/** İlk veri yüklenirken gösterilir — boş-durum mesajının erken görünmesini engeller. */
+export function Yukleniyor() {
+  return (
+    <div className="kart grid place-items-center py-12 text-ink-3" role="status" aria-live="polite">
+      <Loader2 size={22} className="animate-spin mb-2" aria-hidden />
+      <span className="text-sm">Yükleniyor…</span>
+    </div>
+  )
+}
+
+/** Satır içi adet girişi: yazarken beklemez, alandan çıkınca (blur) tek seferde kaydeder. */
+export function AdetKutusu({ deger, onKaydet, etiket = 'Adet' }: {
+  deger: number
+  onKaydet: (n: number) => void
+  etiket?: string
+}) {
+  const [v, setV] = useState(String(deger))
+  useEffect(() => setV(String(deger)), [deger])
+  return (
+    <input
+      type="number"
+      min={1}
+      className="girdi !py-1 w-20 tnum"
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => {
+        const n = Math.max(1, parseInt(v, 10) || 1)
+        setV(String(n))
+        if (n !== deger) onKaydet(n)
+      }}
+      aria-label={etiket}
+    />
   )
 }
