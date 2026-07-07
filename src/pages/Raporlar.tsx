@@ -1,8 +1,8 @@
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Download, Sparkles } from 'lucide-react'
-import { db } from '../db'
+import { talepListele, urunListele } from '../data/api'
+import { useVeri } from '../data/hooks'
 import { csvIndir } from '../lib/csv'
 import { aiAnahtarVarMi, yoneticiOzeti } from '../lib/ai'
 import { BosDurum, SayfaBaslik } from '../components/Parcalar'
@@ -26,9 +26,9 @@ export default function Raporlar() {
   const [ozet, setOzet] = useState('')
   const [ozetYukleniyor, setOzetYukleniyor] = useState(false)
 
-  const talepler = useLiveQuery(() => db.demands.toArray(), []) ?? []
-  const urunler = useLiveQuery(() => db.products.toArray(), []) ?? []
-  const aiVar = useLiveQuery(() => aiAnahtarVarMi(), []) ?? false
+  const talepler = useVeri(talepListele) ?? []
+  const urunler = useVeri(urunListele) ?? []
+  const aiVar = aiAnahtarVarMi()
 
   const urunMap = useMemo(() => new Map(urunler.map((u) => [u.id, u])), [urunler])
 

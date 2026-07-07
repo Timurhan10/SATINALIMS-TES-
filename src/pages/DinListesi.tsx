@@ -1,9 +1,9 @@
 // DIN kodlarına göre büyükten küçüğe liste: her DIN satırında standart adı,
 // ürün sayısı ve talep sayısı; satıra tıklayınca ürünler açılır.
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Search } from 'lucide-react'
-import { db } from '../db'
+import { talepListele, urunListele } from '../data/api'
+import { useVeri } from '../data/hooks'
 import { urunSirala } from '../lib/match'
 import type { Product } from '../types'
 import { BosDurum, SayfaBaslik } from '../components/Parcalar'
@@ -20,8 +20,8 @@ export default function DinListesi() {
   const [arama, setArama] = useState('')
   const [acikDin, setAcikDin] = useState<number | null>(null)
 
-  const urunler = useLiveQuery(() => db.products.toArray(), []) ?? []
-  const talepler = useLiveQuery(() => db.demands.toArray(), []) ?? []
+  const urunler = useVeri(urunListele) ?? []
+  const talepler = useVeri(talepListele) ?? []
 
   const gruplar = useMemo<DinGrubu[]>(() => {
     const map = new Map<number, DinGrubu>()

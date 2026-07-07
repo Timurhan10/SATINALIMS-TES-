@@ -2,16 +2,24 @@
 // Ayarlar'dan girer (tarayıcıda saklanır, hiçbir sunucuya gönderilmez).
 // Anahtar yoksa bu modüldeki özellikler arayüzde gizlenir; sistem tam çalışır.
 import Anthropic from '@anthropic-ai/sdk'
-import { ayarOku } from '../db'
 
 export const AI_ANAHTAR_KEY = 'anthropicApiKey'
 
-export async function aiAnahtarVarMi(): Promise<boolean> {
-  return (await ayarOku(AI_ANAHTAR_KEY)).trim().length > 0
+export function aiAnahtariOku(): string {
+  return (localStorage.getItem(AI_ANAHTAR_KEY) ?? '').trim()
+}
+
+export function aiAnahtariYaz(anahtar: string): void {
+  if (anahtar.trim()) localStorage.setItem(AI_ANAHTAR_KEY, anahtar.trim())
+  else localStorage.removeItem(AI_ANAHTAR_KEY)
+}
+
+export function aiAnahtarVarMi(): boolean {
+  return aiAnahtariOku().length > 0
 }
 
 async function istemci(): Promise<Anthropic> {
-  const anahtar = (await ayarOku(AI_ANAHTAR_KEY)).trim()
+  const anahtar = aiAnahtariOku()
   if (!anahtar) throw new Error('AI anahtarı tanımlı değil (Ayarlar sayfasından girin).')
   return new Anthropic({ apiKey: anahtar, dangerouslyAllowBrowser: true })
 }

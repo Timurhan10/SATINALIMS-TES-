@@ -1,35 +1,30 @@
 // Müşteriler ve Tedarikçiler için ortak basit rehber bileşeni.
 import { useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import type { EntityTable } from 'dexie'
-import { useLiveQuery } from 'dexie-react-hooks'
+import type { RehberApi, RehberKaydi } from '../data/api'
+import { useVeri } from '../data/hooks'
 import Modal from './Modal'
 import { BosDurum, SayfaBaslik } from './Parcalar'
 import { toast } from './Toast'
 import { trLower } from '../lib/searchWords'
 
-export interface RehberKaydi {
-  id?: number
-  ad: string
-  telefon: string
-  email: string
-}
+export type { RehberKaydi } from '../data/api'
 
 interface Props {
   baslik: string
   aciklama: string
   tekil: string // "müşteri" | "tedarikçi"
-  tablo: EntityTable<RehberKaydi, 'id'>
+  api: RehberApi
   ekSutun?: { baslik: string; deger: (id: number) => number } // talep sayısı vb.
 }
 
-export default function Rehber({ baslik, aciklama, tekil, tablo, ekSutun }: Props) {
+export default function Rehber({ baslik, aciklama, tekil, api, ekSutun }: Props) {
   const [arama, setArama] = useState('')
   const [duzenlenen, setDuzenlenen] = useState<RehberKaydi | null>(null)
   const [modalAcik, setModalAcik] = useState(false)
   const [form, setForm] = useState<RehberKaydi>({ ad: '', telefon: '', email: '' })
 
-  const kayitlar = useLiveQuery(() => tablo.orderBy('ad').toArray(), []) ?? []
+  const kayitlar = useVeri(api.listele) ?? []
   const filtreli = kayitlar.filter((k) => !arama.trim() || trLower(k.ad).includes(trLower(arama.trim())))
 
   function ac(kayit?: RehberKaydi) {
@@ -44,10 +39,10 @@ export default function Rehber({ baslik, aciklama, tekil, tablo, ekSutun }: Prop
       return
     }
     if (duzenlenen?.id) {
-      await tablo.update(duzenlenen.id, { ad: form.ad.trim(), telefon: form.telefon, email: form.email })
+      await api.guncelle(duzenlenen.id, { ad: form.ad.trim(), telefon: form.telefon, email: form.email })
       toast('Güncellendi.')
     } else {
-      await tablo.add({ ad: form.ad.trim(), telefon: form.telefon, email: form.email })
+      await api.ekle({ ad: form.ad.trim(), telefon: form.telefon, email: form.email })
       toast('Eklendi.')
     }
     setModalAcik(false)
@@ -106,7 +101,7 @@ export default function Rehber({ baslik, aciklama, tekil, tablo, ekSutun }: Prop
                     <button
                       className="text-ink-3 hover:text-bad p-1"
                       onClick={async () => {
-                        await tablo.delete(k.id!)
+                        await api.sil(k.id!)
                         toast('Silindi.')
                       }}
                       aria-label="Sil"

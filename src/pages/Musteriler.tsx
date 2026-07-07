@@ -1,10 +1,10 @@
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
-import { db } from '../db'
+import { musteriApi, talepListele } from '../data/api'
+import { useVeri } from '../data/hooks'
 import Rehber from '../components/Rehber'
 
 export default function Musteriler() {
-  const talepler = useLiveQuery(() => db.demands.toArray(), []) ?? []
+  const talepler = useVeri(talepListele) ?? []
   const sayilar = useMemo(() => {
     const m = new Map<number, number>()
     for (const t of talepler) m.set(t.customerId, (m.get(t.customerId) ?? 0) + 1)
@@ -16,7 +16,7 @@ export default function Musteriler() {
       baslik="Müşteriler"
       aciklama="Talep girerken yazdığınız yeni firmalar buraya otomatik eklenir."
       tekil="müşteri"
-      tablo={db.customers}
+      api={musteriApi}
       ekSutun={{ baslik: 'Talep sayısı', deger: (id) => sayilar.get(id) ?? 0 }}
     />
   )

@@ -1,8 +1,8 @@
 // Firma/müşteri seçici: yazarken mevcut müşterilerden öneri sunar,
 // yoksa yazılan adla yeni müşteri oluşturulacağını belirtir.
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useRef, useState } from 'react'
-import { db } from '../db'
+import { musteriListele } from '../data/api'
+import { useVeri } from '../data/hooks'
 import { trLower } from '../lib/searchWords'
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
 export default function CustomerCombobox({ deger, setDeger, hata }: Props) {
   const [acik, setAcik] = useState(false)
   const kutu = useRef<HTMLDivElement>(null)
-  const musteriler = useLiveQuery(() => db.customers.orderBy('ad').toArray(), []) ?? []
+  const musteriler = useVeri(musteriListele) ?? []
 
   const oneriler = useMemo(() => {
     const q = trLower(deger.trim())

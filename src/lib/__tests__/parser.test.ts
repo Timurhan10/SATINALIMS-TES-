@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { kaliteBul, olcuBul, parseSerbestMetin } from '../parser'
 import { urunEslestir } from '../match'
-import { ornekKatalog } from '../../seed'
+import { ornekKatalog } from './ornekKatalog'
 
 describe('parseSerbestMetin', () => {
   it('"imbus a2" → grup + kalite', () => {

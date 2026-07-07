@@ -1,10 +1,10 @@
 // Akıllı ürün arama: serbest metin (parser) + GRUP + KALİTE filtreleri.
 // Talepler'de çoklu seçim, sipariş listelerinde tekli ekleme için kullanılır.
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { db } from '../db'
+import { urunListele } from '../data/api'
+import { useVeri } from '../data/hooks'
 import { parseSerbestMetin } from '../lib/parser'
 import { urunEslestir } from '../lib/match'
 import type { Kalite, Product } from '../types'
@@ -26,7 +26,7 @@ export default function ProductSearch({
 }: Props) {
   const [grup, setGrup] = useState('')
   const [kalite, setKalite] = useState<Kalite | ''>('')
-  const urunler = useLiveQuery(() => db.products.toArray(), []) ?? []
+  const urunler = useVeri(urunListele) ?? []
 
   const gruplar = useMemo(
     () => [...new Set(urunler.map((u) => u.grup).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),

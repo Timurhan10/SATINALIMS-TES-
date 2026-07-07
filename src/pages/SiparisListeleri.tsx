@@ -1,9 +1,11 @@
 // Kalıcı sipariş listeleri: liste oluştur/aç/sil, ürün ekle, gerçek .xlsx indir
 // (tedarikçiye fiyat sormak için: Açıklama | Grup | DIN | Adet | FİYAT | Tedarikçi).
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { ArrowLeft, FileDown, Plus, Trash2 } from 'lucide-react'
-import { db } from '../db'
+import {
+  kalemEkle, kalemGuncelle, kalemListele, kalemSil, listeEkle, listeListele, listeSil, tumKalemler,
+} from '../data/api'
+import { useVeri } from '../data/hooks'
 import type { OrderItem, OrderList, Product } from '../types'
 import { siparisXlsxIndir } from '../lib/excel'
 import ProductSearch from '../components/ProductSearch'
@@ -15,20 +17,19 @@ export default function SiparisListeleri() {
   const [yeniAd, setYeniAd] = useState('')
   const [metin, setMetin] = useState('')
 
-  const listeler = useLiveQuery(() => db.orderLists.orderBy('createdAt').reverse().toArray(), []) ?? []
+  const listeler = useVeri(listeListele) ?? []
   const kalemler =
-    useLiveQuery(
-      async (): Promise<OrderItem[]> =>
-        acikListe?.id ? db.orderItems.where('listeId').equals(acikListe.id).toArray() : [],
+    useVeri(
+      async (): Promise<OrderItem[]> => (acikListe?.id ? kalemListele(acikListe.id) : []),
       [acikListe?.id],
     ) ?? []
   const kalemSayilari =
-    useLiveQuery(async () => {
-      const hepsi = await db.orderItems.toArray()
+    useVeri(async () => {
+      const hepsi = await tumKalemler()
       const m = new Map<number, number>()
       for (const k of hepsi) m.set(k.listeId, (m.get(k.listeId) ?? 0) + 1)
       return m
-    }, []) ?? new Map<number, number>()
+    }) ?? new Map<number, number>()
 
   async function listeOlustur() {
     const ad = yeniAd.trim()
@@ -36,16 +37,15 @@ export default function SiparisListeleri() {
       toast('Liste adı girin.', 'hata')
       return
     }
-    const id = (await db.orderLists.add({ ad, createdAt: Date.now() })) as number
+    const yeni = await listeEkle(ad)
     setYeniAd('')
-    const yeni = await db.orderLists.get(id)
-    if (yeni) setAcikListe(yeni)
+    setAcikListe(yeni)
     toast('Liste oluşturuldu.')
   }
 
   async function urunEkle(u: Product) {
     if (!acikListe?.id) return
-    await db.orderItems.add({
+    await kalemEkle({
       listeId: acikListe.id,
       productId: u.id ?? null,
       aciklama: u.aciklama,
@@ -113,14 +113,14 @@ export default function SiparisListeleri() {
                         min={1}
                         className="girdi !py-1 w-20 tnum"
                         value={k.adet}
-                        onChange={(e) => db.orderItems.update(k.id!, { adet: Math.max(1, Number(e.target.value) || 1) })}
+                        onChange={(e) => kalemGuncelle(k.id!, { adet: Math.max(1, Number(e.target.value) || 1) })}
                         aria-label="Adet"
                       />
                     </td>
                     <td className="px-2 py-2">
                       <button
                         className="text-ink-3 hover:text-bad p-1"
-                        onClick={() => db.orderItems.delete(k.id!)}
+                        onClick={() => kalemSil(k.id!)}
                         aria-label="Kalemi sil"
                       >
                         <Trash2 size={15} />
@@ -169,10 +169,7 @@ export default function SiparisListeleri() {
                 <button
                   className="btn btn-tehlike btn-kucuk"
                   onClick={async () => {
-                    await db.transaction('rw', db.orderLists, db.orderItems, async () => {
-                      await db.orderItems.where('listeId').equals(l.id!).delete()
-                      await db.orderLists.delete(l.id!)
-                    })
+                    await listeSil(l.id!) // kalemler CASCADE ile birlikte silinir
                     toast('Liste silindi.')
                   }}
                 >

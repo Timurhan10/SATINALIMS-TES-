@@ -1,4 +1,4 @@
-import { db } from '../db'
+import { tedarikciApi } from '../data/api'
 import Rehber from '../components/Rehber'
 
 export default function Tedarikciler() {
@@ -7,7 +7,7 @@ export default function Tedarikciler() {
       baslik="Tedarikçiler"
       aciklama="Sipariş listelerini göndereceğiniz tedarikçi rehberi."
       tekil="tedarikçi"
-      tablo={db.suppliers}
+      api={tedarikciApi}
     />
   )
 }

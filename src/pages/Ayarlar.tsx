@@ -1,43 +1,105 @@
-import { useEffect, useState } from 'react'
-import { Download, Moon, RefreshCw, Sparkles, Sun, Trash2, Upload } from 'lucide-react'
-import { ayarOku, ayarYaz, tumVeriyiSil, yedekAl, yedekYukle } from '../db'
-import { AI_ANAHTAR_KEY } from '../lib/ai'
-import { ornekVeriYukle } from '../seed'
+import { useState } from 'react'
+import { Building2, Copy, Download, Moon, Sparkles, Sun, Trash2, Upload, UserPlus } from 'lucide-react'
+import { tumVeriyiSil, yedekAl, yedekYukle } from '../data/backup'
+import { katilimKoduOlustur, uyeListele } from '../data/api'
+import { useVeri } from '../data/hooks'
+import { hataMesaji } from '../data/client'
+import { useAuth } from '../auth/AuthContext'
+import { AI_ANAHTAR_KEY, aiAnahtariOku, aiAnahtariYaz } from '../lib/ai'
 import { SayfaBaslik } from '../components/Parcalar'
 import { toast } from '../components/Toast'
 
 export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; setTema: (t: 'light' | 'dark') => void }) {
-  const [anahtar, setAnahtar] = useState('')
-  const [yuklendi, setYuklendi] = useState(false)
-  const [kalici, setKalici] = useState<boolean | null>(null)
+  const { session, uyelik } = useAuth()
+  const [anahtar, setAnahtar] = useState(aiAnahtariOku)
+  const [katilimKodu, setKatilimKodu] = useState('')
+  const [mesgul, setMesgul] = useState(false)
 
-  useEffect(() => {
-    ayarOku(AI_ANAHTAR_KEY).then((v) => {
-      setAnahtar(v)
-      setYuklendi(true)
-    })
-    // Kalıcı depolama iste ve durumu göster
-    navigator.storage
-      ?.persist?.()
-      .then(setKalici)
-      .catch(() => setKalici(null))
-  }, [])
+  const uyeler = useVeri(uyeListele) ?? []
+  const sahipMi = uyelik?.rol === 'owner'
 
   async function yedekIndir() {
-    const json = await yedekAl()
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `paslanmaz-yedek-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-    toast('Yedek indirildi.')
+    try {
+      const json = await yedekAl()
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `paslanmaz-yedek-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast('Yedek indirildi.')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    }
+  }
+
+  async function kodUret() {
+    setMesgul(true)
+    try {
+      setKatilimKodu(await katilimKoduOlustur())
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    } finally {
+      setMesgul(false)
+    }
   }
 
   return (
     <div className="max-w-2xl">
-      <SayfaBaslik baslik="Ayarlar" aciklama="Tema, AI anahtarı ve veri yönetimi." />
+      <SayfaBaslik baslik="Ayarlar" aciklama="Şirket, tema, AI anahtarı ve veri yönetimi." />
+
+      {/* Şirket */}
+      <div className="kart p-4 md:p-5 mb-4">
+        <div className="mikro mb-2 flex items-center gap-1.5">
+          <Building2 size={13} aria-hidden /> Şirket
+        </div>
+        <p className="text-sm text-ink-2 mb-3">
+          <strong>{uyelik?.orgAd}</strong> · Hesabınız: {session?.user.email}
+          {sahipMi ? ' (şirket sahibi)' : ' (üye)'}
+        </p>
+
+        <div className="mb-3">
+          <div className="text-xs font-medium text-ink-2 mb-1.5">Ekip ({uyeler.length} kişi)</div>
+          <div className="grid gap-1">
+            {uyeler.map((u) => (
+              <div key={u.userId} className="flex items-center justify-between text-sm bg-surface-2 rounded-lg px-3 py-1.5">
+                <span className="truncate">{u.email}</span>
+                <span className="text-xs text-ink-3 shrink-0 ml-2">{u.rol === 'owner' ? 'Sahip' : 'Üye'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {sahipMi && (
+          <div>
+            <button className="btn btn-ikincil" onClick={kodUret} disabled={mesgul}>
+              <UserPlus size={16} aria-hidden />
+              {mesgul ? 'Üretiliyor…' : 'Mesai arkadaşı için katılım kodu üret'}
+            </button>
+            {katilimKodu && (
+              <div className="mt-2 flex items-center gap-2 bg-accent-soft text-accent rounded-lg px-3 py-2">
+                <span className="font-mono font-bold tracking-wider">{katilimKodu}</span>
+                <button
+                  className="text-accent hover:opacity-70 p-1"
+                  onClick={() =>
+                    navigator.clipboard?.writeText(katilimKodu).then(
+                      () => toast('Kod kopyalandı.'),
+                      () => toast('Kopyalanamadı.', 'hata'),
+                    )
+                  }
+                  aria-label="Kodu kopyala"
+                >
+                  <Copy size={14} />
+                </button>
+                <span className="text-xs opacity-80">
+                  Tek kullanımlık — arkadaşınız giriş ekranındaki “Şirkete katıl” sekmesinde kullanır.
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Tema */}
       <div className="kart p-4 md:p-5 mb-4">
@@ -55,7 +117,8 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
         </div>
         <p className="text-sm text-ink-2 mb-3">
           Anthropic API anahtarınızı girerseniz iki yardımcı açılır: katalogda olmayan ürünü doğal dilden
-          çözümleme ve raporlarda yönetici özeti. Anahtar yalnızca <strong>bu tarayıcıda</strong> saklanır.
+          çözümleme ve raporlarda yönetici özeti. Anahtar yalnızca <strong>bu tarayıcıda</strong> saklanır,
+          buluta gönderilmez.
         </p>
         <div className="flex gap-2">
           <input
@@ -64,13 +127,12 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
             placeholder="sk-ant-…"
             value={anahtar}
             onChange={(e) => setAnahtar(e.target.value)}
-            disabled={!yuklendi}
             aria-label="Anthropic API anahtarı"
           />
           <button
             className="btn btn-birincil"
-            onClick={async () => {
-              await ayarYaz(AI_ANAHTAR_KEY, anahtar.trim())
+            onClick={() => {
+              aiAnahtariYaz(anahtar)
               toast(anahtar.trim() ? 'AI anahtarı kaydedildi.' : 'AI anahtarı kaldırıldı.')
             }}
           >
@@ -79,25 +141,18 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
         </div>
         <p className="text-xs text-ink-3 mt-2">
           Anahtar almak için: console.anthropic.com → API Keys. Kullanılan modeller: claude-haiku-4-5 (çözümleme),
-          claude-opus-4-8 (özet).
+          claude-opus-4-8 (özet). Kayıt anahtarı: {AI_ANAHTAR_KEY}
         </p>
       </div>
 
       {/* Veri */}
       <div className="kart p-4 md:p-5">
         <div className="mikro mb-2">Veri Yönetimi</div>
-        <p className="text-sm text-ink-2 mb-2">
-          Tüm veriler <strong>anında ve otomatik</strong> olarak bu tarayıcının içine (IndexedDB) kaydedilir —
-          kaydet düğmesine gerek yoktur ve internete gönderilmez. Veriler siteye ve tarayıcıya özeldir:
-          her zaman aynı adresi ve aynı tarayıcıyı kullanın.
+        <p className="text-sm text-ink-2 mb-3">
+          Verileriniz <strong>bulutta, yalnızca şirketinize özel</strong> olarak saklanır ve her değişiklik
+          anında kaydedilir. Tüm cihazlardan aynı veriye erişirsiniz; kullanmak için internet bağlantısı gerekir.
+          Eski (tarayıcı içi) sürümden aldığınız JSON yedeği de buradan geri yükleyebilirsiniz.
         </p>
-        {kalici !== null && (
-          <p className={`text-sm font-medium mb-3 ${kalici ? 'text-ok' : 'text-warn'}`}>
-            {kalici
-              ? '✓ Kalıcı depolama aktif — tarayıcı verilerinizi otomatik silmez.'
-              : '⚠ Kalıcı depolama izni verilmedi — güvence için düzenli JSON yedek alın.'}
-          </p>
-        )}
         <div className="flex flex-wrap gap-2">
           <button className="btn btn-birincil" onClick={yedekIndir}>
             <Download size={16} aria-hidden /> Yedek indir (JSON)
@@ -111,35 +166,36 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
               onChange={async (e) => {
                 const f = e.target.files?.[0]
                 if (!f) return
+                if (!window.confirm('Yedek geri yüklenecek ve MEVCUT şirket verisinin yerini alacak. Devam edilsin mi?')) {
+                  e.target.value = ''
+                  return
+                }
                 try {
                   await yedekYukle(await f.text())
                   toast('Yedek geri yüklendi.')
-                } catch {
-                  toast('Yedek dosyası okunamadı.', 'hata')
+                } catch (err) {
+                  toast(hataMesaji(err), 'hata')
                 }
                 e.target.value = ''
               }}
             />
           </label>
-          <button
-            className="btn btn-ikincil"
-            onClick={async () => {
-              await ornekVeriYukle()
-              toast('Örnek veri yüklendi.')
-            }}
-          >
-            <RefreshCw size={16} aria-hidden /> Örnek veriyi yükle
-          </button>
-          <button
-            className="btn btn-tehlike"
-            onClick={async () => {
-              if (!window.confirm('TÜM veriler silinecek (talepler, katalog, müşteriler…). Emin misiniz?')) return
-              await tumVeriyiSil()
-              toast('Tüm veriler silindi.')
-            }}
-          >
-            <Trash2 size={16} aria-hidden /> Tüm veriyi sil
-          </button>
+          {sahipMi && (
+            <button
+              className="btn btn-tehlike"
+              onClick={async () => {
+                if (!window.confirm('Şirketinizin TÜM verileri silinecek (talepler, katalog, müşteriler…). Emin misiniz?')) return
+                try {
+                  await tumVeriyiSil()
+                  toast('Tüm veriler silindi.')
+                } catch (e) {
+                  toast(hataMesaji(e), 'hata')
+                }
+              }}
+            >
+              <Trash2 size={16} aria-hidden /> Tüm veriyi sil
+            </button>
+          )}
         </div>
       </div>
     </div>

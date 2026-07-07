@@ -1,7 +1,7 @@
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useRef, useState } from 'react'
 import { FileSpreadsheet, Pencil, Plus, Search, Trash2 } from 'lucide-react'
-import { db } from '../db'
+import { urunGuncelle, urunKaynaktanSil, urunListele, urunSil, urunToptanEkle } from '../data/api'
+import { useVeri } from '../data/hooks'
 import type { Kalite, Product } from '../types'
 import { parseSerbestMetin, trUpper } from '../lib/parser'
 import { urunEslestir, urunSirala } from '../lib/match'
@@ -26,7 +26,7 @@ export default function Katalog() {
   const [surukleniyor, setSurukleniyor] = useState(false)
   const dosyaInput = useRef<HTMLInputElement>(null)
 
-  const urunler = useLiveQuery(() => db.products.toArray(), []) ?? []
+  const urunler = useVeri(urunListele) ?? []
 
   const gruplar = useMemo(
     () => [...new Set(urunler.map((u) => u.grup).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
@@ -49,18 +49,10 @@ export default function Katalog() {
         toast('Dosyada geçerli ürün satırı bulunamadı.', 'hata')
         return
       }
-      if (mod === 'degistir') {
-        await db.transaction('rw', db.products, async () => {
-          await db.products.where('kaynak').equals('katalog').delete()
-          const mevcutKodlar = new Set((await db.products.toArray()).map((u) => u.kartKodu))
-          await db.products.bulkAdd(yeni.filter((u) => !mevcutKodlar.has(u.kartKodu)))
-        })
-      } else {
-        await db.transaction('rw', db.products, async () => {
-          const mevcutKodlar = new Set((await db.products.toArray()).map((u) => u.kartKodu))
-          await db.products.bulkAdd(yeni.filter((u) => !mevcutKodlar.has(u.kartKodu)))
-        })
-      }
+      // Aynı kart kodu sunucuda otomatik atlanır (org içi benzersizlik);
+      // "değiştir" modunda önce Excel kaynaklı eski ürünler silinir.
+      if (mod === 'degistir') await urunKaynaktanSil('katalog')
+      await urunToptanEkle(yeni)
       toast(`${yeni.length} ürün içe aktarıldı${atlanan ? ` (${atlanan} satır atlandı)` : ''}.`)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Excel okunamadı.', 'hata')
@@ -177,7 +169,7 @@ export default function Katalog() {
                       <button
                         className="text-ink-3 hover:text-bad p-1"
                         onClick={async () => {
-                          await db.products.delete(u.id!)
+                          await urunSil(u.id!)
                           toast('Ürün silindi.')
                         }}
                         aria-label="Sil"
@@ -247,7 +239,7 @@ function DuzeltModal({ urun, kapat }: { urun: Product | null; kapat: () => void 
     const boyHam = form.boyMm !== undefined ? form.boyMm : u.boyMm
     const olcu = typeof olcuHam === 'string' ? (olcuHam === '' ? null : parseFloat(String(olcuHam).replace(',', '.'))) : olcuHam
     const boyMm = typeof boyHam === 'string' ? (boyHam === '' ? null : parseFloat(String(boyHam).replace(',', '.'))) : boyHam
-    await db.products.update(u.id, {
+    await urunGuncelle(u.id, {
       aciklama: trUpper(String(form.aciklama ?? u.aciklama)),
       grup: trUpper(String(form.grup ?? u.grup)),
       standart: String(form.standart ?? u.standart),

@@ -1,7 +1,10 @@
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import { Plus, Sparkles, Trash2 } from 'lucide-react'
-import { db } from '../db'
+import {
+  musteriApi, musteriListele, talepGuncelle, talepListele, talepSil, talepToptanEkle,
+  urunEkle, urunListele,
+} from '../data/api'
+import { useVeri } from '../data/hooks'
 import type { Demand, DemandDurum, Kalite, Product } from '../types'
 import { DURUM_ETIKET, KAYIP_NEDENLERI } from '../types'
 import { parseSerbestMetin, trUpper } from '../lib/parser'
@@ -20,9 +23,9 @@ function bugun(): string {
 /** Müşteri adından id bulur; yoksa oluşturur. */
 async function musteriIdBul(ad: string): Promise<number> {
   const temiz = ad.trim()
-  const mevcut = (await db.customers.toArray()).find((m) => trLower(m.ad) === trLower(temiz))
+  const mevcut = (await musteriListele()).find((m) => trLower(m.ad) === trLower(temiz))
   if (mevcut?.id) return mevcut.id
-  return (await db.customers.add({ ad: temiz, telefon: '', email: '' })) as number
+  return (await musteriApi.ekle({ ad: temiz, telefon: '', email: '' })).id!
 }
 
 export default function Talepler() {
@@ -37,15 +40,15 @@ export default function Talepler() {
   const [elleAcik, setElleAcik] = useState(false)
   const [aiCalisiyor, setAiCalisiyor] = useState(false)
 
-  const aiVar = useLiveQuery(() => aiAnahtarVarMi(), []) ?? false
+  const aiVar = aiAnahtarVarMi()
 
   // ---- liste filtreleri ----
   const [listeArama, setListeArama] = useState('')
   const [listeDurum, setListeDurum] = useState<DemandDurum | ''>('')
 
-  const talepler = useLiveQuery(() => db.demands.orderBy('createdAt').reverse().toArray(), []) ?? []
-  const musteriler = useLiveQuery(() => db.customers.toArray(), []) ?? []
-  const urunler = useLiveQuery(() => db.products.toArray(), []) ?? []
+  const talepler = useVeri(talepListele) ?? []
+  const musteriler = useVeri(musteriListele) ?? []
+  const urunler = useVeri(urunListele) ?? []
 
   const musteriAd = useMemo(() => new Map(musteriler.map((m) => [m.id, m.ad])), [musteriler])
   const urunMap = useMemo(() => new Map(urunler.map((u) => [u.id, u])), [urunler])
@@ -97,7 +100,7 @@ export default function Talepler() {
       kayipNedeni: durum === 'VERILMEDI' ? kayipNedeni : '',
       createdAt: Date.now(),
     }))
-    await db.demands.bulkAdd(kayitlar)
+    await talepToptanEkle(kayitlar)
     toast(`${kayitlar.length} talep kaydedildi.`)
     setSecililer(new Map())
     setMetin('')
@@ -109,7 +112,7 @@ export default function Talepler() {
     setAiCalisiyor(true)
     try {
       const c = await urunCozumle(metin)
-      const id = (await db.products.add({
+      const yeni = await urunEkle({
         kartKodu: `AI-${Date.now()}`,
         aciklama: trUpper(c.aciklama),
         grup: trUpper(c.grup),
@@ -123,12 +126,9 @@ export default function Talepler() {
         disTipi: c.olcu !== null ? 'metrik' : '',
         kaynak: 'ai',
         inCatalog: false,
-      })) as number
-      const yeni = await db.products.get(id)
-      if (yeni) {
-        setSecililer((eski) => new Map(eski).set(id, yeni))
-        toast(`AI ürünü oluşturdu: ${yeni.aciklama}`)
-      }
+      })
+      setSecililer((eski) => new Map(eski).set(yeni.id!, yeni))
+      toast(`AI ürünü oluşturdu: ${yeni.aciklama}`)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'AI çözümleme başarısız.', 'hata')
     } finally {
@@ -137,7 +137,7 @@ export default function Talepler() {
   }
 
   async function durumGuncelle(t: Demand, yeniDurum: DemandDurum) {
-    await db.demands.update(t.id!, {
+    await talepGuncelle(t.id!, {
       durum: yeniDurum,
       kayipNedeni: yeniDurum === 'VERILMEDI' ? t.kayipNedeni || KAYIP_NEDENLERI[0] : '',
     })
@@ -299,7 +299,7 @@ export default function Talepler() {
                         <select
                           className="girdi w-auto !py-1 !px-2 text-xs"
                           value={t.kayipNedeni || KAYIP_NEDENLERI[0]}
-                          onChange={(e) => db.demands.update(t.id!, { kayipNedeni: e.target.value })}
+                          onChange={(e) => talepGuncelle(t.id!, { kayipNedeni: e.target.value })}
                           aria-label="Kayıp nedeni"
                         >
                           {KAYIP_NEDENLERI.map((n) => (
@@ -314,7 +314,7 @@ export default function Talepler() {
                       <button
                         className="text-ink-3 hover:text-bad p-1"
                         onClick={async () => {
-                          await db.demands.delete(t.id!)
+                          await talepSil(t.id!)
                           toast('Talep silindi.')
                         }}
                         aria-label="Talebi sil"
@@ -360,7 +360,7 @@ export function ElleUrunModal({
     }
     const olcuN = olcu ? parseFloat(olcu.replace(',', '.')) : null
     const boyN = boy ? parseFloat(boy.replace(',', '.')) : null
-    const id = (await db.products.add({
+    const u = await urunEkle({
       kartKodu: `MAN-${Date.now()}`,
       aciklama: trUpper(aciklama.trim()),
       grup: trUpper(grup.trim()),
@@ -374,10 +374,9 @@ export function ElleUrunModal({
       disTipi: olcuN ? 'metrik' : '',
       kaynak: 'manuel',
       inCatalog: false,
-    })) as number
-    const u = await db.products.get(id)
+    })
     toast('Ürün eklendi.')
-    if (u && onOlustu) onOlustu(u)
+    if (onOlustu) onOlustu(u)
     kapat()
     setAciklama('')
     setGrup('')

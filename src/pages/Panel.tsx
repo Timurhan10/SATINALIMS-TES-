@@ -1,7 +1,7 @@
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { db } from '../db'
+import { musteriListele, talepListele, urunListele } from '../data/api'
+import { useVeri } from '../data/hooks'
 import { BosDurum, KpiKarti, SayfaBaslik } from '../components/Parcalar'
 import { DURUM_ETIKET } from '../types'
 import type { DemandDurum } from '../types'
@@ -13,10 +13,10 @@ const DURUM_RENK: Record<DemandDurum, string> = {
 }
 
 export default function Panel() {
-  const talepler = useLiveQuery(() => db.demands.toArray(), []) ?? []
-  const urunSayisi = useLiveQuery(() => db.products.count(), []) ?? 0
-  const urunler = useLiveQuery(() => db.products.toArray(), []) ?? []
-  const musteriler = useLiveQuery(() => db.customers.toArray(), []) ?? []
+  const talepler = useVeri(talepListele) ?? []
+  const urunler = useVeri(urunListele) ?? []
+  const musteriler = useVeri(musteriListele) ?? []
+  const urunSayisi = urunler.length
 
   const urunMap = useMemo(() => new Map(urunler.map((u) => [u.id, u])), [urunler])
   const musteriMap = useMemo(() => new Map(musteriler.map((m) => [m.id, m.ad])), [musteriler])

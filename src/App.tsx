@@ -1,7 +1,7 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import {
-  BarChart3, Bolt, ClipboardList, Contact, LayoutDashboard, ListOrdered,
-  Moon, Package, Settings, Sun, Truck,
+  BarChart3, Bolt, ClipboardList, Contact, KeyRound, LayoutDashboard, ListOrdered,
+  LogOut, Moon, Package, Settings, Sun, Truck,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import Panel from './pages/Panel'
@@ -13,7 +13,14 @@ import SiparisListeleri from './pages/SiparisListeleri'
 import Musteriler from './pages/Musteriler'
 import Tedarikciler from './pages/Tedarikciler'
 import Ayarlar from './pages/Ayarlar'
+import Giris from './pages/Giris'
+import OrgKurulum from './pages/OrgKurulum'
+import KurulumBekleniyor from './pages/KurulumBekleniyor'
+import Admin from './pages/Admin'
 import { ToastAlani } from './components/Toast'
+import { useAuth } from './auth/AuthContext'
+import { hasConfig } from './data/client'
+import { ADMIN_EPOSTA } from './supabaseConfig'
 
 const MENU = [
   { yol: '/panel', ad: 'Panel', Ikon: LayoutDashboard },
@@ -35,23 +42,50 @@ function temaTercihi(): 'light' | 'dark' {
 
 export default function App() {
   const [tema, setTema] = useState<'light' | 'dark'>(temaTercihi)
+  const { session, uyelik, yukleniyor, cikisYap } = useAuth()
 
   useEffect(() => {
     document.documentElement.dataset.theme = tema
     localStorage.setItem('tema', tema)
   }, [tema])
 
+  // ---- kimlik kapısı ----
+  if (!hasConfig()) return <KurulumBekleniyor />
+  if (yukleniyor) {
+    return (
+      <div className="min-h-screen grid place-items-center text-ink-3 text-sm">Yükleniyor…</div>
+    )
+  }
+  if (!session) {
+    return (
+      <>
+        <Giris />
+        <ToastAlani />
+      </>
+    )
+  }
+  if (!uyelik) {
+    return (
+      <>
+        <OrgKurulum />
+        <ToastAlani />
+      </>
+    )
+  }
+
+  const adminMi = (session.user.email ?? '').toLowerCase() === ADMIN_EPOSTA
+
   return (
     <div className="min-h-screen md:flex">
       {/* Sol menü */}
-      <aside className="md:w-60 md:min-h-screen shrink-0 bg-surface border-b md:border-b-0 md:border-r border-line">
+      <aside className="md:w-60 md:min-h-screen md:flex md:flex-col shrink-0 bg-surface border-b md:border-b-0 md:border-r border-line">
         <div className="flex items-center gap-2.5 px-5 py-4">
           <span className="grid place-items-center w-9 h-9 rounded-lg bg-accent text-accent-ink">
             <Bolt size={20} aria-hidden />
           </span>
           <div className="leading-tight">
             <div className="font-bold tracking-tight">Paslanmaz Takip</div>
-            <div className="text-xs text-ink-3">Talep &amp; Satınalma</div>
+            <div className="text-xs text-ink-3 truncate max-w-36" title={uyelik.orgAd}>{uyelik.orgAd}</div>
           </div>
         </div>
         <nav className="flex md:block overflow-x-auto px-3 pb-3 md:pb-4 gap-1">
@@ -71,15 +105,38 @@ export default function App() {
               {ad}
             </NavLink>
           ))}
+          {adminMi && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap md:mb-0.5 ${
+                  isActive
+                    ? 'bg-accent-soft text-accent'
+                    : 'text-ink-2 hover:bg-surface-2 hover:text-ink'
+                }`
+              }
+            >
+              <KeyRound size={17} aria-hidden />
+              Platform Yönetimi
+            </NavLink>
+          )}
         </nav>
-        <div className="hidden md:block px-5 py-4 mt-auto">
-          <button
-            className="btn btn-ikincil btn-kucuk"
-            onClick={() => setTema(tema === 'dark' ? 'light' : 'dark')}
-          >
-            {tema === 'dark' ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
-            {tema === 'dark' ? 'Açık tema' : 'Koyu tema'}
-          </button>
+        <div className="hidden md:block px-5 py-4 mt-auto border-t border-line">
+          <div className="text-xs text-ink-3 truncate mb-2" title={session.user.email ?? ''}>
+            {session.user.email}
+          </div>
+          <div className="flex gap-2">
+            <button
+              className="btn btn-ikincil btn-kucuk"
+              onClick={() => setTema(tema === 'dark' ? 'light' : 'dark')}
+              aria-label="Tema değiştir"
+            >
+              {tema === 'dark' ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
+            </button>
+            <button className="btn btn-ikincil btn-kucuk" onClick={cikisYap}>
+              <LogOut size={15} aria-hidden /> Çıkış
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -96,6 +153,7 @@ export default function App() {
           <Route path="/musteriler" element={<Musteriler />} />
           <Route path="/tedarikciler" element={<Tedarikciler />} />
           <Route path="/ayarlar" element={<Ayarlar tema={tema} setTema={setTema} />} />
+          {adminMi && <Route path="/admin" element={<Admin />} />}
           <Route path="*" element={<Navigate to="/panel" replace />} />
         </Routes>
       </main>
