@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { Building2, Copy, Download, Moon, Sparkles, Sun, Trash2, Upload, UserPlus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Building2, Copy, Download, HardDriveUpload, Moon, Sparkles, Sun, Trash2, Upload, UserPlus } from 'lucide-react'
 import { tumVeriyiSil, yedekAl, yedekYukle } from '../data/backup'
+import { eskiYerelVeriOku, type EskiVeri } from '../data/eskiVeri'
 import { katilimKoduOlustur, uyeListele } from '../data/api'
 import { useVeri } from '../data/hooks'
 import { hataMesaji } from '../data/client'
@@ -14,9 +15,35 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
   const [anahtar, setAnahtar] = useState(aiAnahtariOku)
   const [katilimKodu, setKatilimKodu] = useState('')
   const [mesgul, setMesgul] = useState(false)
+  const [eskiVeri, setEskiVeri] = useState<EskiVeri | null>(null)
+  const [tasiniyor, setTasiniyor] = useState(false)
 
   const uyeler = useVeri(uyeListele) ?? []
   const sahipMi = uyelik?.rol === 'owner'
+
+  useEffect(() => {
+    eskiYerelVeriOku().then(setEskiVeri).catch(() => {})
+  }, [])
+
+  async function eskiVeriyiTasi() {
+    if (!eskiVeri) return
+    if (
+      !window.confirm(
+        `Bu tarayıcıda eski sürümden kalan ${eskiVeri.urunSayisi} ürün ve ${eskiVeri.talepSayisi} talep bulundu. ` +
+          'Buluta aktarılacak ve şirketinizin MEVCUT bulut verisinin yerini alacak. Devam edilsin mi?',
+      )
+    )
+      return
+    setTasiniyor(true)
+    try {
+      await yedekYukle(eskiVeri.json)
+      toast('Eski yerel veriler buluta aktarıldı.')
+    } catch (e) {
+      toast(hataMesaji(e), 'hata')
+    } finally {
+      setTasiniyor(false)
+    }
+  }
 
   async function yedekIndir() {
     try {
@@ -153,6 +180,18 @@ export default function Ayarlar({ tema, setTema }: { tema: 'light' | 'dark'; set
           anında kaydedilir. Tüm cihazlardan aynı veriye erişirsiniz; kullanmak için internet bağlantısı gerekir.
           Eski (tarayıcı içi) sürümden aldığınız JSON yedeği de buradan geri yükleyebilirsiniz.
         </p>
+        {eskiVeri && (
+          <div className="bg-accent-soft rounded-lg px-3 py-2.5 mb-3 text-sm">
+            <div className="text-accent font-medium mb-1.5">
+              Bu tarayıcıda eski (bulut öncesi) sürümden kalan veri bulundu:
+              {' '}{eskiVeri.urunSayisi.toLocaleString('tr-TR')} ürün, {eskiVeri.talepSayisi} talep.
+            </div>
+            <button className="btn btn-birincil btn-kucuk" onClick={eskiVeriyiTasi} disabled={tasiniyor}>
+              <HardDriveUpload size={14} aria-hidden />
+              {tasiniyor ? 'Aktarılıyor…' : 'Eski verileri buluta aktar'}
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button className="btn btn-birincil" onClick={yedekIndir}>
             <Download size={16} aria-hidden /> Yedek indir (JSON)

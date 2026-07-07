@@ -74,10 +74,13 @@ ve aynı şirket verisini görür.
 
 ## 8. Eski verilerinizi taşıma (isteğe bağlı)
 
-Tarayıcı içi eski sürümü kullanıyorduysanız:
+Tarayıcı içi eski sürümü kullanıyorduysanız verileriniz aynı tarayıcıda durur.
+Yeni sürümde giriş yaptıktan sonra **aynı tarayıcıda** **Ayarlar** sayfasını açın:
+eski veri otomatik algılanır ve **"Eski verileri buluta aktar"** düğmesi çıkar —
+tek tıkla katalog, talepler, müşteriler ve sipariş listeleri buluta taşınır.
 
-1. Eski sürümde: **Ayarlar → Yedek indir (JSON)**.
-2. Yeni sürümde giriş yaptıktan sonra: **Ayarlar → Yedeği geri yükle** ile aynı dosyayı seçin.
+Elinizde daha önce indirilmiş bir JSON yedek varsa **Ayarlar → Yedeği geri yükle**
+ile de aktarabilirsiniz.
 
 ---
 
